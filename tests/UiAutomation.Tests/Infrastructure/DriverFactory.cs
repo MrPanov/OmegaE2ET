@@ -60,5 +60,6 @@ public static class DriverFactory
         options.AddUserProfilePreference("credentials_enable_service", false);
         options.AddUserProfilePreference("profile.password_manager_enabled", false);
         options.AddUserProfilePreference("profile.password_manager_leak_detection", false);
+        options.SetLoggingPreference(LogType.Performance, LogLevel.All);
     }
 }
