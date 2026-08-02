@@ -40,6 +40,9 @@ dotnet test --filter "TestCategory=Smoke"
 Ручные сценарии каталогов находятся в
 [`docs/manual-tests/catalogs.md`](docs/manual-tests/catalogs.md).
 
+Ручные сценарии глобального поиска и поисковой выдачи находятся в
+[`docs/manual-tests/search-results.md`](docs/manual-tests/search-results.md).
+
 Автоматические smoke-тесты меню каталогов находятся в
 `tests/UiAutomation.Tests/Tests/CatalogMenuTests.cs`. Каждый пункт каталога
 отображается в Test Explorer как отдельный параметризованный тест.
@@ -88,3 +91,4 @@ TeamCity как Versioned Settings и убедитесь, что на агент
 
 Создайте в TeamCity параметр `env.OMEGA_PASSWORD` типа **Password**. Остальные
 параметры можно переопределить в конфигурации или при ручном запуске.
+
