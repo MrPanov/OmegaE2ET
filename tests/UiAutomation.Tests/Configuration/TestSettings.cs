@@ -8,6 +8,10 @@ public sealed record TestSettings(
     string LoginEmail,
     string LoginPassword)
 {
+    public bool HasUsableLoginPassword =>
+        !string.IsNullOrWhiteSpace(LoginPassword) &&
+        !(LoginPassword.StartsWith('<') && LoginPassword.EndsWith('>'));
+
     public static TestSettings FromEnvironment() => new(
         BaseUrl: Get("BASE_URL", "https://test.omega.page/"),
         Browser: Get("BROWSER", "chrome").ToLowerInvariant(),

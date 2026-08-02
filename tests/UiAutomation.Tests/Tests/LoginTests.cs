@@ -19,9 +19,8 @@ public sealed class LoginTests : UiTestBase
 
     private void RequirePassword() =>
         Assume.That(
-            Settings.LoginPassword,
-            Is.Not.Empty,
-            "Set the OMEGA_PASSWORD environment variable to run positive login tests.");
+            Settings.HasUsableLoginPassword,
+            Is.True);
 
     [Test]
     [Category("Smoke")]

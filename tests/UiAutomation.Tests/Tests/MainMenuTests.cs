@@ -74,9 +74,8 @@ public sealed class MainMenuTests
         _settings = TestSettings.FromEnvironment();
 
         Assume.That(
-            _settings.LoginPassword,
-            Is.Not.Empty,
-            "Set the OMEGA_PASSWORD environment variable to run main menu tests.");
+            _settings.HasUsableLoginPassword,
+            Is.True);
 
         _driver = DriverFactory.Create(_settings);
 
