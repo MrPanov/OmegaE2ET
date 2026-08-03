@@ -46,7 +46,7 @@ public sealed class TyreCatalogFilterTests : AuthenticatedUiTestFixture
     [Property("TestCaseId", "TYRE-001")]
     public void DiameterFilterKeepsOnlyTyresOfThatDiameter()
     {
-        var diameter = _filter.SelectFirstFacetOption("Діаметр");
+        var diameter = _filter.SelectFacetOption("Діаметр", "16");
         _filter.ApplyFilters();
 
         var descriptions = _filter.ProductDescriptions;
@@ -66,7 +66,7 @@ public sealed class TyreCatalogFilterTests : AuthenticatedUiTestFixture
     [Property("TestCaseId", "TYRE-001")]
     public void SizeFilterKeepsOnlyTyresOfThatSize()
     {
-        var size = _filter.SelectFirstFacetOption("Типорозмір");
+        var size = _filter.SelectFacetOption("Типорозмір", "155/65R14");
         _filter.ApplyFilters();
 
         var descriptions = _filter.ProductDescriptions;
@@ -87,12 +87,12 @@ public sealed class TyreCatalogFilterTests : AuthenticatedUiTestFixture
     [Test]
     [Property("TestCaseId", "TYRE-002")]
     public void SeasonFilterIsAppliedAndReturnsBoundedResults() =>
-        AssertNarrowingFacet("Сезонність");
+        AssertNarrowingFacet("Сезонність", "Зима");
 
     [Test]
     [Property("TestCaseId", "TYRE-002")]
     public void PurposeFilterIsAppliedAndReturnsBoundedResults() =>
-        AssertNarrowingFacet("Призначення");
+        AssertNarrowingFacet("Призначення", "Легкова");
 
     [Test]
     [Property("TestCaseId", "CAT-COM-005")]
@@ -118,9 +118,9 @@ public sealed class TyreCatalogFilterTests : AuthenticatedUiTestFixture
         });
     }
 
-    private void AssertNarrowingFacet(string facetTitle)
+    private void AssertNarrowingFacet(string facetTitle, string optionValue)
     {
-        var option = _filter.SelectFirstFacetOption(facetTitle);
+        var option = _filter.SelectFacetOption(facetTitle, optionValue);
         _filter.ApplyFilters();
 
         Assert.Multiple(() =>

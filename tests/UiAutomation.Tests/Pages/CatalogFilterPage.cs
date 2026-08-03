@@ -69,10 +69,34 @@ public sealed class CatalogFilterPage(IWebDriver driver, TimeSpan waitTimeout)
             panel.FindElements(OptionLabelBy)
                 .FirstOrDefault(e => e.Displayed && e.Text.Trim().Length > 0));
 
-        var parsed = ParseOption(NormalizeWhitespace(option.Text));
-        option.Click();
+        return SelectOption(option);
+    }
 
-        var checkbox = option
+    /// <summary>
+    /// Selects the facet value whose visible label equals <paramref name="optionValue"/>
+    /// (ignoring the trailing "(count)"), e.g. facet "Діаметр" value "16".
+    /// </summary>
+    public FacetOption SelectFacetOption(string facetTitle, string optionValue)
+    {
+        var panel = FacetPanel(facetTitle);
+        ExpandPanel(panel);
+
+        var option = _wait.Until(_ =>
+            panel.FindElements(OptionLabelBy)
+                .FirstOrDefault(e => e.Displayed && string.Equals(
+                    ParseOption(NormalizeWhitespace(e.Text)).Value,
+                    optionValue,
+                    StringComparison.OrdinalIgnoreCase)));
+
+        return SelectOption(option);
+    }
+
+    private FacetOption SelectOption(IWebElement optionLabel)
+    {
+        var parsed = ParseOption(NormalizeWhitespace(optionLabel.Text));
+        ClickRobustly(optionLabel);
+
+        var checkbox = optionLabel
             .FindElement(By.XPath(
                 "ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' checkbox ')][1]"))
             .FindElement(By.CssSelector("input[type='checkbox']"));
@@ -89,7 +113,7 @@ public sealed class CatalogFilterPage(IWebDriver driver, TimeSpan waitTimeout)
     {
         var toggle = _wait.Until(d =>
             d.FindElements(ListViewToggleBy).FirstOrDefault(e => e.Displayed && e.Enabled));
-        toggle.Click();
+        ClickRobustly(toggle);
         _wait.Until(d => d.FindElements(InStockCheckboxBy).Any(e => e.Displayed));
     }
 
@@ -123,7 +147,7 @@ public sealed class CatalogFilterPage(IWebDriver driver, TimeSpan waitTimeout)
             d.FindElements(InStockCheckboxBy).FirstOrDefault(e => e.Displayed && e.Enabled));
         if (checkbox.Selected) return;
 
-        checkbox.Click();
+        ClickRobustly(checkbox);
         _wait.Until(_ => checkbox.Selected);
     }
 
@@ -133,7 +157,7 @@ public sealed class CatalogFilterPage(IWebDriver driver, TimeSpan waitTimeout)
 
         var apply = _wait.Until(d =>
             d.FindElements(ApplyButtonBy).FirstOrDefault(e => e.Displayed && e.Enabled));
-        apply.Click();
+        ClickRobustly(apply);
 
         if (previous is not null)
         {
@@ -157,8 +181,25 @@ public sealed class CatalogFilterPage(IWebDriver driver, TimeSpan waitTimeout)
             d.FindElements(ResetButtonBy).FirstOrDefault(e =>
                 e.Displayed &&
                 !(e.GetAttribute("class") ?? string.Empty).Split(' ').Contains("disabledbutton")));
-        reset.Click();
+        ClickRobustly(reset);
         _wait.Until(_ => !HasActiveFilters);
+    }
+
+    // A floating "scroll to top" button can overlap controls near the bottom of the
+    // viewport, so scroll the target to the centre first and fall back to a scripted
+    // click if the native click is still intercepted.
+    private void ClickRobustly(IWebElement element)
+    {
+        ((IJavaScriptExecutor)driver).ExecuteScript(
+            "arguments[0].scrollIntoView({block: 'center'});", element);
+        try
+        {
+            element.Click();
+        }
+        catch (ElementClickInterceptedException)
+        {
+            ((IJavaScriptExecutor)driver).ExecuteScript("arguments[0].click();", element);
+        }
     }
 
     private IWebElement FacetPanel(string title) => _wait.Until(d =>
@@ -169,7 +210,7 @@ public sealed class CatalogFilterPage(IWebDriver driver, TimeSpan waitTimeout)
         var body = panel.FindElement(By.CssSelector(".panel-collapse"));
         if (body.Displayed) return;
 
-        panel.FindElement(By.CssSelector(".panel-heading a")).Click();
+        ClickRobustly(panel.FindElement(By.CssSelector(".panel-heading a")));
         _wait.Until(_ => body.Displayed);
     }
 
