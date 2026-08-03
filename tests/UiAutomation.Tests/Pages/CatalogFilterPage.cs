@@ -15,7 +15,6 @@ public sealed class CatalogFilterPage(IWebDriver driver, TimeSpan waitTimeout)
 {
     private readonly WebDriverWait _wait = new(driver, waitTimeout);
 
-    private static readonly By FacetPanelBy = By.CssSelector("div.accordion-newFilter");
     private static readonly By OverlayBy = By.CssSelector("div.block-ui-overlay");
     private static readonly By ApplyButtonBy = By.CssSelector("button.btn-apply-filter");
     private static readonly By ResetButtonBy =
@@ -52,7 +51,9 @@ public sealed class CatalogFilterPage(IWebDriver driver, TimeSpan waitTimeout)
     public void WaitUntilLoaded()
     {
         _wait.Until(d => !IsVisible(d, OverlayBy));
-        _wait.Until(d => d.FindElements(FacetPanelBy).Any(e => e.Displayed));
+        // Wait for products rather than facets: some catalogs (e.g. Підшипники)
+        // have no facet panels but still show a result list and stock columns.
+        _wait.Until(d => d.FindElements(ProductCardBy).Any(e => e.Displayed));
     }
 
     /// <summary>
