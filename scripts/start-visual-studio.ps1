@@ -3,6 +3,7 @@ param()
 
 $visualStudioPath = 'C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\devenv.exe'
 $solutionPath = Join-Path $PSScriptRoot '..\UiAutomation.sln'
+$localSettingsPath = Join-Path $PSScriptRoot '..\testsettings.local.json'
 
 if (-not (Test-Path -LiteralPath $visualStudioPath)) {
     throw "Visual Studio was not found: $visualStudioPath"
@@ -10,6 +11,12 @@ if (-not (Test-Path -LiteralPath $visualStudioPath)) {
 
 if (-not (Test-Path -LiteralPath $solutionPath)) {
     throw "Solution was not found: $solutionPath"
+}
+
+if (Test-Path -LiteralPath $localSettingsPath) {
+    Start-Process -FilePath $visualStudioPath -ArgumentList $solutionPath
+    Write-Host 'Visual Studio started. Credentials will be read from testsettings.local.json.'
+    return
 }
 
 $securePassword = Read-Host 'Enter OMEGA_PASSWORD' -AsSecureString

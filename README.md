@@ -14,6 +14,21 @@ Selenium Manager автоматически подбирает драйвер у
 
 ## Локальный запуск
 
+Для запуска из Visual Studio без повторного ввода пароля скопируйте
+`testsettings.local.example.json` в `testsettings.local.json` и заполните локальные
+профили. Файл `testsettings.local.json` исключён из Git и не попадёт в коммит.
+
+Поле `activeEnvironment` выбирает профиль:
+
+- `Test` — тестовый сервер и тестовый пользователь;
+- `Production` — production-сервер и production-клиент.
+
+Перед первым production-запуском заполните в профиле `Production` поля `baseUrl`,
+`loginEmail` и `loginPassword`, затем измените `activeEnvironment` на `Production`.
+Чтобы вернуться на тестовый сервер, укажите `Test`. Переменные `BASE_URL`,
+`OMEGA_EMAIL`, `OMEGA_PASSWORD` и `OMEGA_ENVIRONMENT` имеют приоритет над локальным
+файлом, поэтому TeamCity может по-прежнему передавать настройки безопасными параметрами.
+
 ```powershell
 $env:OMEGA_PASSWORD = "<пароль тестового пользователя>"
 dotnet restore

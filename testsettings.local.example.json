@@ -1,0 +1,15 @@
+{
+  "activeEnvironment": "Test",
+  "environments": {
+    "Test": {
+      "baseUrl": "https://test.omega.page/",
+      "loginEmail": "web@omega-auto.biz",
+      "loginPassword": "<test password>"
+    },
+    "Production": {
+      "baseUrl": "<production URL>",
+      "loginEmail": "<production client login>",
+      "loginPassword": "<production client password>"
+    }
+  }
+}

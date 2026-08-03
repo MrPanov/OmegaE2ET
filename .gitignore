@@ -7,3 +7,4 @@ artifacts/
 /work/
 *.user
 *.suo
+/testsettings.local.json
