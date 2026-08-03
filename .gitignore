@@ -8,3 +8,8 @@ artifacts/
 *.user
 *.suo
 /testsettings.local.json
+
+# Visual Studio migration / upgrade artifacts
+UpgradeLog*.htm
+_UpgradeReport_Files/
+Backup*/

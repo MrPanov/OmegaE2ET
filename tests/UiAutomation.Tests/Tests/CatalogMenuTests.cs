@@ -1,6 +1,4 @@
 using NUnit.Framework;
-using OpenQA.Selenium;
-using UiAutomation.Tests.Configuration;
 using UiAutomation.Tests.Infrastructure;
 using UiAutomation.Tests.Pages;
 
@@ -10,10 +8,8 @@ namespace UiAutomation.Tests.Tests;
 [NonParallelizable]
 [FixtureLifeCycle(LifeCycle.SingleInstance)]
 [Category("Catalogs")]
-public sealed class CatalogMenuTests
+public sealed class CatalogMenuTests : AuthenticatedUiTestFixture
 {
-    private IWebDriver _driver = null!;
-    private TestSettings _settings = null!;
     private CatalogMenuPage _catalogMenu = null!;
 
     private static readonly string[] CatalogGroups =
@@ -52,67 +48,10 @@ public sealed class CatalogMenuTests
         "Подарунки"
     ];
 
-    [OneTimeSetUp]
-    public void LoginOnceAndOpenCatalogMenu()
+    protected override void OnAuthenticated()
     {
-        _settings = TestSettings.FromEnvironment();
-
-        Assume.That(
-            _settings.HasUsableLoginPassword,
-            Is.True);
-
-        _driver = DriverFactory.Create(_settings);
-
-        var loginPage = new LoginPage(
-            _driver,
-            TimeSpan.FromSeconds(_settings.ExplicitWaitSeconds));
-        loginPage.Open(_settings.BaseUrl);
-
-        if (!loginPage.IsAlreadyAuthenticated)
-        {
-            loginPage.Login(_settings.LoginEmail, _settings.LoginPassword);
-        }
-
-        Assert.That(loginPage.WaitUntilAuthenticated(), Is.True, "Authentication failed.");
-
-        _catalogMenu = new CatalogMenuPage(
-            _driver,
-            TimeSpan.FromSeconds(_settings.ExplicitWaitSeconds));
+        _catalogMenu = new CatalogMenuPage(Driver, Timeout);
         _catalogMenu.OpenMenu();
-    }
-
-    [TearDown]
-    public void SaveScreenshotWhenTestFails()
-    {
-        if (TestContext.CurrentContext.Result.Outcome.Status !=
-            NUnit.Framework.Interfaces.TestStatus.Failed)
-        {
-            return;
-        }
-
-        if (_driver is not ITakesScreenshot screenshotDriver) return;
-
-        var directory = Path.Combine(TestContext.CurrentContext.WorkDirectory, "screenshots");
-        Directory.CreateDirectory(directory);
-        var testName = string.Concat(
-            TestContext.CurrentContext.Test.Name.Select(c =>
-                Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
-        var path = Path.Combine(directory, $"{testName}-{DateTime.UtcNow:yyyyMMdd-HHmmss}.png");
-        screenshotDriver.GetScreenshot().SaveAsFile(path);
-        TestContext.AddTestAttachment(path, "Screenshot on failure");
-    }
-
-    [OneTimeTearDown]
-    public void CloseBrowserAfterAllCatalogTests()
-    {
-        try
-        {
-            _driver?.Quit();
-        }
-        finally
-        {
-            _driver?.Dispose();
-        }
     }
 
     [Test]
@@ -174,6 +113,6 @@ public sealed class CatalogMenuTests
     {
         _catalogMenu.OpenCatalog(itemName, expectedRoute);
 
-        Assert.That(_driver.Url, Does.Contain(expectedRoute).IgnoreCase);
+        Assert.That(Driver.Url, Does.Contain(expectedRoute).IgnoreCase);
     }
 }

@@ -1,6 +1,4 @@
 using NUnit.Framework;
-using OpenQA.Selenium;
-using UiAutomation.Tests.Configuration;
 using UiAutomation.Tests.Infrastructure;
 using UiAutomation.Tests.Pages;
 
@@ -10,7 +8,7 @@ namespace UiAutomation.Tests.Tests;
 [NonParallelizable]
 [FixtureLifeCycle(LifeCycle.SingleInstance)]
 [Category("Search")]
-public sealed class SearchTests
+public sealed class SearchTests : AuthenticatedUiTestFixture
 {
     private const string ProductCode = "OC90";
     private const string ProductCard = "4610495";
@@ -20,28 +18,11 @@ public sealed class SearchTests
     private const string PartialDescription = "Фільтр оливний LANOS";
     private const string MissingProduct = "zz-no-product-987654321";
 
-    private IWebDriver _driver = null!;
     private SearchResultsPage _search = null!;
 
-    [OneTimeSetUp]
-    public void LoginOnce()
+    protected override void OnAuthenticated()
     {
-        var settings = TestSettings.FromEnvironment();
-
-        Assume.That(settings.HasUsableLoginPassword, Is.True);
-
-        _driver = DriverFactory.Create(settings);
-        var timeout = TimeSpan.FromSeconds(settings.ExplicitWaitSeconds);
-        var loginPage = new LoginPage(_driver, timeout);
-        loginPage.Open(settings.BaseUrl);
-
-        if (!loginPage.IsAlreadyAuthenticated)
-        {
-            loginPage.Login(settings.LoginEmail, settings.LoginPassword);
-        }
-
-        Assert.That(loginPage.WaitUntilAuthenticated(), Is.True, "Authentication failed.");
-        _search = new SearchResultsPage(_driver, timeout);
+        _search = new SearchResultsPage(Driver, Timeout);
     }
 
     [SetUp]
@@ -49,38 +30,6 @@ public sealed class SearchTests
     {
         _search.CloseHistory();
         _search.SetStartsWith(false);
-    }
-
-    [TearDown]
-    public void SaveScreenshotWhenTestFails()
-    {
-        if (TestContext.CurrentContext.Result.Outcome.Status !=
-            NUnit.Framework.Interfaces.TestStatus.Failed ||
-            _driver is not ITakesScreenshot screenshotDriver)
-        {
-            return;
-        }
-
-        var directory = Path.Combine(TestContext.CurrentContext.WorkDirectory, "screenshots");
-        Directory.CreateDirectory(directory);
-        var testName = string.Concat(TestContext.CurrentContext.Test.Name.Select(c =>
-            Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
-        var path = Path.Combine(directory, $"{testName}-{DateTime.UtcNow:yyyyMMdd-HHmmss}.png");
-        screenshotDriver.GetScreenshot().SaveAsFile(path);
-        TestContext.AddTestAttachment(path, "Screenshot on failure");
-    }
-
-    [OneTimeTearDown]
-    public void CloseBrowser()
-    {
-        try
-        {
-            _driver?.Quit();
-        }
-        finally
-        {
-            _driver?.Dispose();
-        }
     }
 
     [Test]
