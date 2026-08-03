@@ -20,10 +20,19 @@ public sealed class CatalogFilterTests : AuthenticatedUiTestFixture
     private CatalogMenuPage _catalogMenu = null!;
     private CatalogFilterPage _filter = null!;
 
+    // Faceted catalog pages that expose a "Бренд" facet. "Підшипники"
+    // (#/app/simplesearchPodshipnik) is intentionally omitted: it has no facet
+    // filters in the test catalog, so there is no applicability to verify.
     private static readonly (string Name, string Route)[] Catalogs =
     [
         ("Шини", "#/app/simplesearchTires"),
+        ("Колісні диски", "#/app/simplesearchWheelDisc"),
+        ("Камери", "#/app/simplesearchCameras"),
         ("Оливи", "#/app/simplesearchOil"),
+        ("Тех. рідини", "#/app/simplesearchTechnicalFluids"),
+        ("Лампи", "#/app/simplesearchLamps"),
+        ("Ремені Агро техніка", "#/app/simplesearchBelts"),
+        ("Аварійні з'єднувачі", "#/app/simplesearchPneumo"),
         ("АКБ", "#/app/simplesearchAccum")
     ];
 
