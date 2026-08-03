@@ -23,7 +23,7 @@ namespace UiAutomation.Tests.Tests;
 [Category("CatalogFilters")]
 public sealed class TyreCatalogFilterTests : AuthenticatedUiTestFixture
 {
-    private const string CatalogName = "Шини";
+    private const int CategoryIndex = 0;
     private const string Route = "#/app/simplesearchTires";
 
     private CatalogMenuPage _catalogMenu = null!;
@@ -38,7 +38,7 @@ public sealed class TyreCatalogFilterTests : AuthenticatedUiTestFixture
     [SetUp]
     public void OpenTyreCatalog()
     {
-        _catalogMenu.OpenCatalog(CatalogName, Route);
+        _catalogMenu.OpenSimpleSearchCatalog(CategoryIndex, Route);
         _filter.WaitUntilLoaded();
     }
 

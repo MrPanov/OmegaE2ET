@@ -58,6 +58,22 @@ public sealed class CatalogMenuPage(IWebDriver driver, TimeSpan waitTimeout)
         _wait.Until(d => d.Url.Contains(expectedRoute, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// Opens a "simplesearch" catalog by its Angular <c>categoryClick(index)</c>
+    /// handler. These menu items are <c>href="javascript:void(0)"</c> entries in a
+    /// hover mega-menu, so a native click is not reliable — the handler is invoked
+    /// through the browser instead. Navigating by index also avoids matching the
+    /// menu text (some items contain a backtick, e.g. "Аварійні з`єднувачі").
+    /// </summary>
+    public void OpenSimpleSearchCatalog(int categoryIndex, string expectedRoute)
+    {
+        var link = _wait.Until(d =>
+            d.FindElements(By.CssSelector($"a[ng-click='categoryClick({categoryIndex});']"))
+                .FirstOrDefault());
+        ((IJavaScriptExecutor)driver).ExecuteScript("arguments[0].click();", link);
+        _wait.Until(d => d.Url.Contains(expectedRoute, StringComparison.OrdinalIgnoreCase));
+    }
+
     public bool SelectCatalog(string itemName)
     {
         OpenMenu();
