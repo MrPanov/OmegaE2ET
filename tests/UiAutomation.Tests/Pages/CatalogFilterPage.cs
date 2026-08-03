@@ -114,7 +114,9 @@ public sealed class CatalogFilterPage(IWebDriver driver, TimeSpan waitTimeout)
         var toggle = _wait.Until(d =>
             d.FindElements(ListViewToggleBy).FirstOrDefault(e => e.Displayed && e.Enabled));
         ClickRobustly(toggle);
-        _wait.Until(d => d.FindElements(InStockCheckboxBy).Any(e => e.Displayed));
+        // The in-stock checkbox exists only in the table view; its real <input> is
+        // visually hidden (custom control), so wait for presence rather than display.
+        _wait.Until(d => d.FindElements(InStockCheckboxBy).Count > 0);
     }
 
     /// <summary>
@@ -143,8 +145,9 @@ public sealed class CatalogFilterPage(IWebDriver driver, TimeSpan waitTimeout)
     /// <summary>Ticks the "Тільки товар у наявності" (in-stock only) checkbox.</summary>
     public void EnableInStockOnly()
     {
-        var checkbox = _wait.Until(d =>
-            d.FindElements(InStockCheckboxBy).FirstOrDefault(e => e.Displayed && e.Enabled));
+        // The real <input> is visually hidden, so match by presence and let
+        // ClickRobustly fall back to a scripted click.
+        var checkbox = _wait.Until(d => d.FindElements(InStockCheckboxBy).FirstOrDefault());
         if (checkbox.Selected) return;
 
         ClickRobustly(checkbox);
@@ -199,8 +202,10 @@ public sealed class CatalogFilterPage(IWebDriver driver, TimeSpan waitTimeout)
         {
             element.Click();
         }
-        catch (ElementClickInterceptedException)
+        catch (Exception ex)
+            when (ex is ElementClickInterceptedException or ElementNotInteractableException)
         {
+            // Overlapped, or a custom control whose real input is visually hidden.
             ((IJavaScriptExecutor)driver).ExecuteScript("arguments[0].click();", element);
         }
     }
