@@ -173,6 +173,9 @@ public sealed class CatalogFilterPage(IWebDriver driver, TimeSpan waitTimeout)
         }
 
         _wait.Until(d => !IsVisible(d, OverlayBy));
+        // The overlay clears before Angular finishes re-rendering the result list,
+        // so wait until the filtered products are actually on the page.
+        _wait.Until(d => d.FindElements(ProductCardBy).Any(e => e.Displayed));
     }
 
     public void ResetFilters()
