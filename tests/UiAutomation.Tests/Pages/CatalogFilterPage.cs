@@ -22,6 +22,11 @@ public sealed class CatalogFilterPage(IWebDriver driver, TimeSpan waitTimeout)
         By.CssSelector("a[ng-click='filterModel.resetModel()']");
     private static readonly By OptionLabelBy =
         By.CssSelector("span.text[ng-click*='selectedLabelClick']");
+    private static readonly By InStockCheckboxBy =
+        By.CssSelector("input[ng-model='filterModel.rest']");
+    private static readonly By ListViewToggleBy = By.CssSelector("a[ng-click='setView(1)']");
+    // Per-warehouse immediate quantity cell (КВ-Ш / ХРК-Ш …), list view only.
+    private static readonly By StockQuantityBy = By.CssSelector("span[ng-style*='war.rest']");
     private static readonly By ProductCardBy = By.CssSelector("a.searchProdCard");
     private static readonly By ProductDescriptionBy = By.CssSelector(".searchDescrip");
     private static readonly By ProductBrandBy = By.CssSelector(".brandSearch");
@@ -74,6 +79,52 @@ public sealed class CatalogFilterPage(IWebDriver driver, TimeSpan waitTimeout)
         _wait.Until(_ => checkbox.Selected);
 
         return parsed;
+    }
+
+    /// <summary>
+    /// Switches the result list to the table ("списком") view. The per-warehouse
+    /// stock columns (КВ-Ш, ХРК-Ш …) and the in-stock checkbox exist only there.
+    /// </summary>
+    public void SwitchToListView()
+    {
+        var toggle = _wait.Until(d =>
+            d.FindElements(ListViewToggleBy).FirstOrDefault(e => e.Displayed && e.Enabled));
+        toggle.Click();
+        _wait.Until(d => d.FindElements(InStockCheckboxBy).Any(e => e.Displayed));
+    }
+
+    /// <summary>
+    /// Product codes shown with zero stock in every warehouse column. A product
+    /// counts as available if any warehouse (e.g. КВ-Ш or ХРК-Ш) shows ≥ 1 pc.
+    /// Requires the table view (see <see cref="SwitchToListView"/>).
+    /// </summary>
+    public IReadOnlyList<string> ProductsWithoutStock()
+    {
+        var missing = new List<string>();
+        foreach (var card in driver.FindElements(ProductCardBy).Where(e => e.Displayed))
+        {
+            var row = card.FindElement(By.XPath(
+                "ancestor::*[.//span[contains(@ng-style, 'war.rest')]][1]"));
+            var quantities = row.FindElements(StockQuantityBy)
+                .Select(cell => LeadingInt(cell.Text));
+            if (!quantities.Any(quantity => quantity >= 1))
+            {
+                missing.Add(NormalizeWhitespace(card.Text));
+            }
+        }
+
+        return missing;
+    }
+
+    /// <summary>Ticks the "Тільки товар у наявності" (in-stock only) checkbox.</summary>
+    public void EnableInStockOnly()
+    {
+        var checkbox = _wait.Until(d =>
+            d.FindElements(InStockCheckboxBy).FirstOrDefault(e => e.Displayed && e.Enabled));
+        if (checkbox.Selected) return;
+
+        checkbox.Click();
+        _wait.Until(_ => checkbox.Selected);
     }
 
     public void ApplyFilters()
@@ -133,6 +184,12 @@ public sealed class CatalogFilterPage(IWebDriver driver, TimeSpan waitTimeout)
         "//div[contains(concat(' ', normalize-space(@class), ' '), ' accordion-newFilter ')]" +
         "[.//div[contains(concat(' ', normalize-space(@class), ' '), ' panel-heading ')]" +
         $"[contains(normalize-space(.), {ToXPathLiteral(title)})]]";
+
+    private static int LeadingInt(string text)
+    {
+        var match = Regex.Match(text, @"\d+");
+        return match.Success ? int.Parse(match.Value) : 0;
+    }
 
     private static FacetOption ParseOption(string raw)
     {
