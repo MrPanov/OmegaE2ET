@@ -24,15 +24,23 @@ Selenium Manager автоматически подбирает драйвер у
 - `Production` — production-сервер и production-клиент.
 
 Перед первым production-запуском заполните в профиле `Production` поля `baseUrl`,
-`loginEmail` и `loginPassword`, затем измените `activeEnvironment` на `Production`.
-Чтобы вернуться на тестовый сервер, укажите `Test`. Переменные `BASE_URL`,
-`OMEGA_EMAIL`, `OMEGA_PASSWORD` и `OMEGA_ENVIRONMENT` имеют приоритет над локальным
-файлом, поэтому TeamCity может по-прежнему передавать настройки безопасными параметрами.
+`loginEmail`, `loginPassword` и весь блок `search` с эталонным товаром production-клиента,
+затем измените `activeEnvironment` на `Production`. Чтобы вернуться на тестовый сервер,
+укажите `Test`. Переменные `BASE_URL`, `OMEGA_EMAIL`, `OMEGA_PASSWORD`,
+`OMEGA_ENVIRONMENT`, `SEARCH_MIN_INTERVAL_SECONDS` и переменные `SEARCH_*` имеют
+приоритет над локальным файлом.
 
 ```powershell
 $env:OMEGA_PASSWORD = "<пароль тестового пользователя>"
 dotnet restore
-dotnet test --filter "TestCategory=Smoke"
+dotnet test --filter "TestCategory=P0"
+```
+
+P0 содержит отдельный быстрый набор критических поисковых проверок. Полный P1-набор
+запускается по требованию:
+
+```powershell
+dotnet test --filter "TestCategory=P1"
 ```
 
 Замените текст внутри кавычек на реальный пароль: значение `<пароль>` является
@@ -45,6 +53,8 @@ dotnet test --filter "TestCategory=Smoke"
 - `BROWSER=chrome`
 - `HEADLESS=false` — локально браузер открывается в видимом режиме
 - `EXPLICIT_WAIT_SECONDS=20`
+- `SEARCH_MIN_INTERVAL_SECONDS=5` для Test
+- `SEARCH_MIN_INTERVAL_SECONDS=10` для Production
 
 Пароль намеренно не хранится в репозитории. Поддерживаемые браузеры:
 `chrome`, `edge`, `firefox`. При падении теста снимок экрана прикрепляется к
@@ -77,26 +87,28 @@ dotnet test --filter "TestCategory=Smoke"
 проверяются, поскольку зависят от аккаунта; проверяется стабильная часть маршрута.
 
 Автоматические smoke-тесты глобального поиска находятся в
-`tests/UiAutomation.Tests/Tests/SearchTests.cs`. Набор содержит 25 сценариев
-`SEARCH-BAR-001`–`SEARCH-BAR-009` и `SEARCH-BAR-011`–`SEARCH-BAR-026`: поиск по
+`tests/UiAutomation.Tests/Tests/SearchTests.cs`. Набор содержит 24 сценария
+`SEARCH-BAR-001`–`SEARCH-BAR-009`, `SEARCH-BAR-011`–`SEARCH-BAR-018` и
+`SEARCH-BAR-020`–`SEARCH-BAR-026`: поиск по
 коду, карточке и названию, обработку введённого значения, быстрые запросы,
 очистку, Ctrl+A, вставку, режим «починається з» и историю. Цены и остатки
 намеренно не фиксируются, поскольку являются динамическими. Между обычными
-поисками автотесты выдерживают интервал, необходимый из-за ограничения частоты
-запросов тестового сервера.
+поисками автотесты выдерживают настраиваемый интервал, необходимый из-за ограничения
+частоты запросов сервера.
 
 ### Запуск из Visual Studio с видимым браузером
 
-Visual Studio должна получить переменную `OMEGA_PASSWORD`. Самый безопасный
-вариант — закрыть уже открытую Visual Studio и запустить подготовленный скрипт:
+Если заполнен `testsettings.local.json`, Visual Studio можно открыть обычным способом:
+пароль, активная среда и эталонные поисковые данные будут прочитаны из локального файла.
+Если локального файла нет, закройте уже открытую Visual Studio и запустите скрипт:
 
 ```powershell
 .\scripts\start-visual-studio.ps1
 ```
 
-Скрипт запросит пароль скрыто, установит `OMEGA_PASSWORD` и `HEADLESS=false`
-только для запускаемой Visual Studio и удалит переменные из PowerShell после
-запуска. Пароль не записывается в файл.
+При наличии локального файла скрипт просто откроет решение. Без локального файла он
+запросит пароль скрыто, установит `OMEGA_PASSWORD` и `HEADLESS=false` только для
+запускаемой Visual Studio и удалит переменные из PowerShell после запуска.
 
 То же самое можно сделать вручную:
 

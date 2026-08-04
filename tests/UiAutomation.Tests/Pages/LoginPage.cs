@@ -1,5 +1,6 @@
 using OpenQA.Selenium;
 using OpenQA.Selenium.Support.UI;
+using UiAutomation.Tests.Infrastructure;
 
 namespace UiAutomation.Tests.Pages;
 
@@ -23,8 +24,8 @@ public sealed class LoginPage(IWebDriver driver, TimeSpan waitTimeout)
     {
         driver.Navigate().GoToUrl(baseUrl);
         _wait.Until(d =>
-            HasVisibleElement(d, By.Id("loginInputEmail")) ||
-            HasVisibleElement(d, By.Id("headerInputSearch")));
+            d.IsVisible(By.Id("loginInputEmail")) ||
+            d.IsVisible(By.Id("headerInputSearch")));
     }
 
     public void Login(string email, string password)
@@ -68,7 +69,7 @@ public sealed class LoginPage(IWebDriver driver, TimeSpan waitTimeout)
         EmailInput.Displayed && PasswordInput.Displayed && LoginButton.Displayed;
 
     public bool IsAlreadyAuthenticated =>
-        HasVisibleElement(driver, By.Id("headerInputSearch"));
+        driver.IsVisible(By.Id("headerInputSearch"));
 
     public bool IsEmailInputDisplayed => EmailInput.Displayed;
 
@@ -81,6 +82,4 @@ public sealed class LoginPage(IWebDriver driver, TimeSpan waitTimeout)
     public string PasswordInputType =>
         PasswordInput.GetAttribute("type") ?? string.Empty;
 
-    private static bool HasVisibleElement(IWebDriver webDriver, By by) =>
-        webDriver.FindElements(by).Any(element => element.Displayed);
 }

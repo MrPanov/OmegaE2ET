@@ -46,6 +46,7 @@ public sealed class TyreCatalogFilterTests : AuthenticatedUiTestFixture
     [Property("TestCaseId", "TYRE-001")]
     public void DiameterFilterKeepsOnlyTyresOfThatDiameter()
     {
+        var unfilteredSignature = _filter.ResultSignature;
         var diameter = _filter.SelectFacetOption("Діаметр", "16");
         _filter.ApplyFilters();
 
@@ -56,6 +57,8 @@ public sealed class TyreCatalogFilterTests : AuthenticatedUiTestFixture
         {
             Assert.That(_filter.ResultCount, Is.GreaterThan(0),
                 $"No tyres left after filtering by diameter R{diameter.Value}.");
+            Assert.That(_filter.ResultSignature, Is.Not.EqualTo(unfilteredSignature),
+                $"Diameter R{diameter.Value} did not change the tyre results.");
             Assert.That(descriptions.All(description => pattern.IsMatch(description)), Is.True,
                 $"Some tyres are not diameter R{diameter.Value}: " +
                 $"{string.Join(" | ", descriptions.Where(description => !pattern.IsMatch(description)))}");
@@ -66,6 +69,7 @@ public sealed class TyreCatalogFilterTests : AuthenticatedUiTestFixture
     [Property("TestCaseId", "TYRE-001")]
     public void SizeFilterKeepsOnlyTyresOfThatSize()
     {
+        var unfilteredSignature = _filter.ResultSignature;
         var size = _filter.SelectFacetOption("Типорозмір", "155/65R14");
         _filter.ApplyFilters();
 
@@ -75,6 +79,8 @@ public sealed class TyreCatalogFilterTests : AuthenticatedUiTestFixture
         {
             Assert.That(_filter.ResultCount, Is.GreaterThan(0),
                 $"No tyres left after filtering by size '{size.Value}'.");
+            Assert.That(_filter.ResultSignature, Is.Not.EqualTo(unfilteredSignature),
+                $"Size '{size.Value}' did not change the tyre results.");
             Assert.That(
                 descriptions.All(description =>
                     description.Contains(size.Value, StringComparison.OrdinalIgnoreCase)),
@@ -102,7 +108,7 @@ public sealed class TyreCatalogFilterTests : AuthenticatedUiTestFixture
         // the table view; a product is available if any warehouse shows ≥ 1 pc.
         _filter.SwitchToListView();
         _filter.EnableInStockOnly();
-        _filter.ApplyFilters();
+        _filter.ApplyFilters(requireResultChange: false);
 
         var withoutStock = _filter.ProductsWithoutStock();
 
@@ -110,6 +116,8 @@ public sealed class TyreCatalogFilterTests : AuthenticatedUiTestFixture
         {
             Assert.That(_filter.HasActiveFilters, Is.True,
                 "The in-stock filter was not registered as active.");
+            Assert.That(_filter.IsInStockOnlyEnabled, Is.True,
+                "The in-stock checkbox is not selected.");
             Assert.That(_filter.ResultCount, Is.GreaterThan(0),
                 "No products remained after the in-stock filter.");
             Assert.That(withoutStock, Is.Empty,
@@ -120,6 +128,7 @@ public sealed class TyreCatalogFilterTests : AuthenticatedUiTestFixture
 
     private void AssertNarrowingFacet(string facetTitle, string optionValue)
     {
+        var unfilteredSignature = _filter.ResultSignature;
         var option = _filter.SelectFacetOption(facetTitle, optionValue);
         _filter.ApplyFilters();
 
@@ -127,6 +136,10 @@ public sealed class TyreCatalogFilterTests : AuthenticatedUiTestFixture
         {
             Assert.That(_filter.HasActiveFilters, Is.True,
                 $"'{facetTitle}' filter was not registered as active.");
+            Assert.That(_filter.SelectedFacetValuesCount, Is.GreaterThan(0),
+                $"'{facetTitle}' = '{option.Value}' is not selected.");
+            Assert.That(_filter.ResultSignature, Is.Not.EqualTo(unfilteredSignature),
+                $"'{facetTitle}' = '{option.Value}' did not change the tyre results.");
             Assert.That(_filter.ResultCount, Is.GreaterThan(0),
                 $"'{facetTitle}' = '{option.Value}' returned no products.");
             Assert.That(_filter.ResultCount, Is.LessThanOrEqualTo(option.Count),

@@ -1,5 +1,6 @@
 using OpenQA.Selenium;
 using OpenQA.Selenium.Support.UI;
+using UiAutomation.Tests.Infrastructure;
 
 namespace UiAutomation.Tests.Pages;
 
@@ -42,13 +43,14 @@ public sealed class CatalogMenuPage(IWebDriver driver, TimeSpan waitTimeout)
     public bool IsGroupDisplayed(string groupName)
     {
         OpenMenu();
-        return FindVisible(By.XPath($"//*[normalize-space(.)={ToXPathLiteral(groupName)}]"));
+        return driver.IsVisible(By.XPath(
+            $"//*[normalize-space(.)={XPathHelpers.Literal(groupName)}]"));
     }
 
     public bool IsCatalogItemDisplayed(string itemName)
     {
         OpenMenu();
-        return FindVisible(CatalogItemBy(itemName));
+        return driver.IsVisible(CatalogItemBy(itemName));
     }
 
     public void OpenCatalog(string itemName, string expectedRoute)
@@ -89,9 +91,6 @@ public sealed class CatalogMenuPage(IWebDriver driver, TimeSpan waitTimeout)
             !IsCatalogMenuExpanded(d));
     }
 
-    private bool FindVisible(By by) =>
-        driver.FindElements(by).Any(element => element.Displayed);
-
     private static bool IsCatalogMenuExpanded(IWebDriver webDriver)
     {
         var button = webDriver.FindElements(CatalogButtonBy)
@@ -106,17 +105,8 @@ public sealed class CatalogMenuPage(IWebDriver driver, TimeSpan waitTimeout)
 
     private static By CatalogItemBy(string itemName)
     {
-        var name = ToXPathLiteral(itemName);
-        var nameWithPrefix = ToXPathLiteral($"- {itemName}");
+        var name = XPathHelpers.Literal(itemName);
+        var nameWithPrefix = XPathHelpers.Literal($"- {itemName}");
         return By.XPath($"//a[normalize-space(.)={name} or normalize-space(.)={nameWithPrefix}]");
-    }
-
-    private static string ToXPathLiteral(string value)
-    {
-        if (!value.Contains('\'')) return $"'{value}'";
-        if (!value.Contains('"')) return $"\"{value}\"";
-
-        var parts = value.Split('\'');
-        return $"concat('{string.Join("', \"'\", '", parts)}')";
     }
 }

@@ -77,16 +77,22 @@ public sealed class CatalogFilterTests : AuthenticatedUiTestFixture
     {
         _catalogMenu.OpenSimpleSearchCatalog(categoryIndex, route);
         _filter.WaitUntilLoaded();
+        var unfilteredSignature = _filter.ResultSignature;
 
         var brand = _filter.SelectFirstFacetOption(BrandFacet);
         _filter.ApplyFilters();
 
         var brands = _filter.ProductBrands;
+        var filteredSignature = _filter.ResultSignature;
 
         Assert.Multiple(() =>
         {
             Assert.That(_filter.ResultCount, Is.GreaterThan(0),
                 $"No products remained after filtering '{route}' by brand '{brand.Core}'.");
+            Assert.That(filteredSignature, Is.Not.EqualTo(unfilteredSignature),
+                $"Applying brand '{brand.Core}' did not change products for '{route}'.");
+            Assert.That(_filter.SelectedFacetValuesCount, Is.GreaterThan(0),
+                $"Brand '{brand.Core}' is not selected in '{route}'.");
             Assert.That(brands, Is.Not.Empty);
             Assert.That(
                 brands.All(b => b.Contains(brand.Core, StringComparison.OrdinalIgnoreCase)),
@@ -104,14 +110,20 @@ public sealed class CatalogFilterTests : AuthenticatedUiTestFixture
     {
         _catalogMenu.OpenSimpleSearchCatalog(categoryIndex, route);
         _filter.WaitUntilLoaded();
+        var unfilteredSignature = _filter.ResultSignature;
 
         var option = _filter.SelectFirstFacetOption(facetTitle);
         _filter.ApplyFilters();
+        var filteredSignature = _filter.ResultSignature;
 
         Assert.Multiple(() =>
         {
             Assert.That(_filter.HasActiveFilters, Is.True,
                 $"'{facetTitle}' filter was not registered as active for '{route}'.");
+            Assert.That(_filter.SelectedFacetValuesCount, Is.GreaterThan(0),
+                $"'{facetTitle}' = '{option.Value}' is not selected for '{route}'.");
+            Assert.That(filteredSignature, Is.Not.EqualTo(unfilteredSignature),
+                $"'{facetTitle}' = '{option.Value}' did not change products for '{route}'.");
             Assert.That(_filter.ResultCount, Is.GreaterThan(0),
                 $"'{facetTitle}' = '{option.Value}' returned no products for '{route}'.");
             Assert.That(_filter.ResultCount, Is.LessThanOrEqualTo(option.Count),
@@ -128,7 +140,7 @@ public sealed class CatalogFilterTests : AuthenticatedUiTestFixture
 
         _filter.SwitchToListView();
         _filter.EnableInStockOnly();
-        _filter.ApplyFilters();
+        _filter.ApplyFilters(requireResultChange: false);
 
         var withoutStock = _filter.ProductsWithoutStock();
 
@@ -136,6 +148,8 @@ public sealed class CatalogFilterTests : AuthenticatedUiTestFixture
         {
             Assert.That(_filter.HasActiveFilters, Is.True,
                 $"The in-stock filter was not registered as active for '{route}'.");
+            Assert.That(_filter.IsInStockOnlyEnabled, Is.True,
+                $"The in-stock checkbox is not selected for '{route}'.");
             Assert.That(_filter.ResultCount, Is.GreaterThan(0),
                 $"No products remained after the in-stock filter for '{route}'.");
             Assert.That(withoutStock, Is.Empty,
@@ -150,15 +164,26 @@ public sealed class CatalogFilterTests : AuthenticatedUiTestFixture
     {
         _catalogMenu.OpenSimpleSearchCatalog(categoryIndex, route);
         _filter.WaitUntilLoaded();
+        var unfilteredSignature = _filter.ResultSignature;
 
         _filter.SelectFirstFacetOption(BrandFacet);
         _filter.ApplyFilters();
+        var filteredSignature = _filter.ResultSignature;
         Assert.That(_filter.HasActiveFilters, Is.True,
             $"Filter was not registered as active for '{route}'.");
+        Assert.That(filteredSignature, Is.Not.EqualTo(unfilteredSignature),
+            $"Applied filter did not change products for '{route}'.");
 
         _filter.ResetFilters();
 
-        Assert.That(_filter.HasActiveFilters, Is.False,
-            $"Filters were not cleared after reset for '{route}'.");
+        Assert.Multiple(() =>
+        {
+            Assert.That(_filter.HasActiveFilters, Is.False,
+                $"Filters were not cleared after reset for '{route}'.");
+            Assert.That(_filter.SelectedFacetValuesCount, Is.Zero,
+                $"A facet value remains selected after reset for '{route}'.");
+            Assert.That(_filter.ResultSignature, Is.EqualTo(unfilteredSignature),
+                $"The original products were not restored after reset for '{route}'.");
+        });
     }
 }

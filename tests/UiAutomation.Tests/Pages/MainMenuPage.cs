@@ -1,5 +1,6 @@
 using OpenQA.Selenium;
 using OpenQA.Selenium.Support.UI;
+using UiAutomation.Tests.Infrastructure;
 
 namespace UiAutomation.Tests.Pages;
 
@@ -22,7 +23,7 @@ public sealed class MainMenuPage(IWebDriver driver, TimeSpan waitTimeout)
 
     public bool IsMenuButtonDisplayed => MenuButton.Displayed && MenuButton.Enabled;
 
-    public bool IsMenuExpanded => IsVisible(driver, VisibleMenuMarkerBy);
+    public bool IsMenuExpanded => driver.IsVisible(VisibleMenuMarkerBy);
 
     public void OpenMenu()
     {
@@ -31,7 +32,7 @@ public sealed class MainMenuPage(IWebDriver driver, TimeSpan waitTimeout)
             ClickWhenPageIsReady(MenuButtonBy);
         }
 
-        _wait.Until(d => IsVisible(d, VisibleMenuMarkerBy));
+        _wait.Until(d => d.IsVisible(VisibleMenuMarkerBy));
     }
 
     public void CloseMenu()
@@ -41,14 +42,14 @@ public sealed class MainMenuPage(IWebDriver driver, TimeSpan waitTimeout)
             ClickWhenPageIsReady(MenuButtonBy);
         }
 
-        _wait.Until(d => !IsVisible(d, VisibleMenuMarkerBy));
+        _wait.Until(d => !d.IsVisible(VisibleMenuMarkerBy));
     }
 
     public bool IsSectionDisplayed(string sectionName)
     {
         OpenMenu();
         return driver.FindElements(By.XPath(
-                $"//*[normalize-space(.)={ToXPathLiteral(sectionName)}]"))
+                $"//*[normalize-space(.)={XPathHelpers.Literal(sectionName)}]"))
             .Any(element => element.Displayed);
     }
 
@@ -93,7 +94,7 @@ public sealed class MainMenuPage(IWebDriver driver, TimeSpan waitTimeout)
     public bool IsSubmenuItemDisplayed(string itemName)
     {
         return driver.FindElements(By.XPath(
-                $"//*[normalize-space(.)={ToXPathLiteral(itemName)}]"))
+                $"//*[normalize-space(.)={XPathHelpers.Literal(itemName)}]"))
             .Any(element => element.Displayed);
     }
 
@@ -105,7 +106,7 @@ public sealed class MainMenuPage(IWebDriver driver, TimeSpan waitTimeout)
     {
         _wait.Until(d =>
         {
-            if (IsVisible(d, BlockingOverlayBy)) return false;
+            if (d.IsVisible(BlockingOverlayBy)) return false;
 
             var element = d.FindElements(by)
                 .FirstOrDefault(candidate => candidate.Displayed && candidate.Enabled);
@@ -142,26 +143,5 @@ public sealed class MainMenuPage(IWebDriver driver, TimeSpan waitTimeout)
     }
 
     private static By MenuItemBy(string itemName) =>
-        By.XPath($"//a[normalize-space(.)={ToXPathLiteral(itemName)}]");
-
-    private static bool IsVisible(IWebDriver webDriver, By by)
-    {
-        try
-        {
-            return webDriver.FindElements(by).Any(element => element.Displayed);
-        }
-        catch (StaleElementReferenceException)
-        {
-            return false;
-        }
-    }
-
-    private static string ToXPathLiteral(string value)
-    {
-        if (!value.Contains('\'')) return $"'{value}'";
-        if (!value.Contains('"')) return $"\"{value}\"";
-
-        var parts = value.Split('\'');
-        return $"concat('{string.Join("', \"'\", '", parts)}')";
-    }
+        By.XPath($"//a[normalize-space(.)={XPathHelpers.Literal(itemName)}]");
 }

@@ -1,220 +1,173 @@
+using System.Text.Json;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Chromium;
 using OpenQA.Selenium.Interactions;
 using OpenQA.Selenium.Support.UI;
-using System.Text.Json;
-using System.Text.RegularExpressions;
+using UiAutomation.Tests.Infrastructure;
 
 namespace UiAutomation.Tests.Pages;
 
-public sealed class SearchResultsPage(IWebDriver driver, TimeSpan waitTimeout)
+public sealed class SearchResultsPage
 {
-    private readonly WebDriverWait _wait = new(driver, waitTimeout);
+    private static readonly TimeSpan ResultSettleTime = TimeSpan.FromMilliseconds(200);
+
+    private readonly IWebDriver _driver;
+    private readonly WebDriverWait _wait;
+    private readonly TimeSpan _minimumSearchInterval;
+    private readonly SearchBarComponent _bar;
+    private readonly SearchHistoryComponent _history;
+    private readonly SearchResultComponent _results;
+    private readonly DomMutationTracker _mutations;
     private DateTime _lastSearchStartedUtc = DateTime.MinValue;
 
-    private static readonly TimeSpan MinimumSearchInterval = TimeSpan.FromSeconds(5);
+    public SearchResultsPage(
+        IWebDriver driver,
+        TimeSpan waitTimeout,
+        TimeSpan minimumSearchInterval)
+    {
+        _driver = driver;
+        _wait = new WebDriverWait(driver, waitTimeout);
+        _minimumSearchInterval = minimumSearchInterval;
+        _bar = new SearchBarComponent(driver, _wait);
+        _history = new SearchHistoryComponent(driver, _wait);
+        _results = new SearchResultComponent(driver, _wait);
+        _mutations = new DomMutationTracker(driver);
+    }
 
-    private static readonly By SearchInputBy = By.Id("headerInputSearch");
-    private static readonly By ClearSearchBy = By.CssSelector(".navbar-input-search .removeIcon");
-    private static readonly By StartsWithCheckboxBy = By.Id("searchBeginWith");
-    private static readonly By StartsWithLabelBy = By.CssSelector("label.label-search");
-    private static readonly By HistoryButtonBy =
-        By.CssSelector("a[ng-click='onclickBut(1)']");
-    private static readonly By HistoryContainerBy =
-        By.CssSelector(".history-allSearch-container");
-    private static readonly By HistoryItemsBy =
-        By.CssSelector(".history-allSearch-container #search.active li[ng-mousedown]");
-    private static readonly By BlockingOverlayBy = By.CssSelector("div.block-ui-overlay");
-    private static readonly By SearchRateLimitBy = By.XPath(
-        "//*[contains(normalize-space(.), 'Ви перевищили ліміт пошукових запитів.')]");
-    private static readonly By EmptyResultBy = By.XPath(
-        "//*[@role='alert']//*[contains(normalize-space(.), " +
-        "'За Вашим пошуковим запитом нічого не знайдено.')]");
-    private static readonly By ResultSummaryBy = By.XPath(
-        "//*[starts-with(normalize-space(.), 'Знайдено по ')]");
-    private static readonly By StandardResultBy =
-        By.CssSelector("[ng-repeat='item in searchresult.Items']");
-    private static readonly By StartsWithSummaryBy = By.XPath(
-        "//*[contains(normalize-space(.), 'За цим кодом знайдено брендів:')]");
-    private static readonly By StartsWithCodesBy = By.XPath(
-        "//table//tbody//tr/td[3]//a[normalize-space(.)]");
+    public bool SupportsPerformanceLog => _driver is ChromiumDriver;
 
-    public bool SupportsPerformanceLog => driver is ChromiumDriver;
+    public bool SupportsClipboardPaste => _driver is ChromiumDriver;
 
-    public bool SupportsClipboardPaste => driver is ChromiumDriver;
+    public string Query => _bar.Query;
 
-    public string Query => SearchInput.GetAttribute("value") ?? string.Empty;
+    public string SearchPlaceholder => _bar.Placeholder;
 
-    public string SearchPlaceholder => SearchInput.GetAttribute("placeholder") ?? string.Empty;
+    public string ResultSummary => _results.Summary;
 
-    public string ResultSummary => NormalizeWhitespace(VisibleElement(ResultSummaryBy).Text);
+    public bool HasEmptyResult => _results.HasEmptyResult;
 
-    public bool HasEmptyResult => IsVisible(driver, EmptyResultBy);
+    public bool IsInputUsable => _bar.IsUsable;
 
-    public bool IsInputUsable => SearchInput.Displayed && SearchInput.Enabled;
+    public bool IsLoading => _bar.IsLoading;
 
-    public bool IsLoading => IsVisible(driver, BlockingOverlayBy);
+    public bool IsStartsWithEnabled => _bar.IsStartsWithEnabled;
 
-    public bool IsStartsWithEnabled =>
-        driver.FindElement(StartsWithCheckboxBy).Selected;
+    public IReadOnlyList<string> ProductCodes => _results.ProductCodes;
 
-    public IReadOnlyList<string> ProductCodes => driver.FindElements(
-            By.CssSelector("a.searchProdCard"))
-        .Where(element => element.Displayed)
-        .Select(element => NormalizeWhitespace(element.Text))
-        .Where(text => text.Length > 0)
-        .ToArray();
+    public IReadOnlyList<string> ProductDescriptions => _results.ProductDescriptions;
 
-    public IReadOnlyList<string> ProductDescriptions => driver.FindElements(
-            By.CssSelector(".searchDescrip"))
-        .Where(element => element.Displayed)
-        .Select(element => NormalizeWhitespace(element.Text))
-        .Where(text => text.Length > 0)
-        .ToArray();
+    public IReadOnlyList<string> ProductBrands => _results.ProductBrands;
 
-    public IReadOnlyList<string> ProductBrands => driver.FindElements(
-            By.CssSelector(".brandSearch"))
-        .Where(element => element.Displayed)
-        .Select(element => NormalizeWhitespace(element.Text))
-        .Where(text => text.Length > 0)
-        .ToArray();
-
-    public IReadOnlyList<string> StartsWithCodes => driver.FindElements(StartsWithCodesBy)
-        .Where(element => element.Displayed)
-        .Select(element => NormalizeWhitespace(element.Text))
-        .Where(text => text.Length > 0)
-        .ToArray();
+    public IReadOnlyList<string> StartsWithCodes => _results.StartsWithCodes;
 
     public void Search(string query)
     {
         WaitUntilPageIsReady();
-
-        var previousResult = FindVisibleStateElement();
-
-        ReplaceQuery(query);
+        _bar.ReplaceQuery(query);
         WaitForSearchSlot();
-        SearchInput.SendKeys(Keys.Enter);
-
-        WaitForNewResult(previousResult);
+        var mutationVersion = _mutations.Snapshot();
+        _bar.Input.SendKeys(Keys.Enter);
+        WaitForSearchCompletion(query, mutationVersion, requireQueryMatch: false);
     }
 
-    public void SearchRapidly(string firstQuery, string secondQuery)
+    public void SearchRapidly(string firstQuery, string secondQuery, string expectedSummary)
     {
         WaitUntilPageIsReady();
-        var previousResult = FindVisibleStateElement();
-
-        ReplaceQuery(firstQuery);
+        _bar.ReplaceQuery(firstQuery);
         WaitForSearchSlot();
-        SearchInput.SendKeys(Keys.Enter);
-        ReplaceQuery(secondQuery);
-        SearchInput.SendKeys(Keys.Enter);
+        _bar.Input.SendKeys(Keys.Enter);
+
+        _bar.ReplaceQuery(secondQuery);
+        var mutationVersion = _mutations.Snapshot();
+        _bar.Input.SendKeys(Keys.Enter);
         _lastSearchStartedUtc = DateTime.UtcNow;
 
-        WaitForNewResult(previousResult);
-        _wait.Until(_ => string.Equals(Query, secondQuery, StringComparison.Ordinal));
+        WaitForSearchCompletion(
+            secondQuery,
+            mutationVersion,
+            expectedSummary,
+            requireQueryMatch: true);
     }
 
     public void TypeQuery(string query)
     {
         WaitUntilPageIsReady();
-        ReplaceQuery(query);
+        _bar.ReplaceQuery(query);
     }
 
-    public void ReplaceWithCtrlAAndSearch(string query)
-    {
-        WaitUntilPageIsReady();
-        var previousResult = FindVisibleStateElement();
-        ReplaceQuery(query);
-        WaitForSearchSlot();
-        SearchInput.SendKeys(Keys.Enter);
-        WaitForNewResult(previousResult);
-    }
+    public void ReplaceWithCtrlAAndSearch(string query) => Search(query);
 
     public void SubmitWithoutWaiting(string query)
     {
         WaitUntilPageIsReady();
-        ReplaceQuery(query);
+        _bar.ReplaceQuery(query);
         if (query.Trim().Length > 0)
         {
             WaitForSearchSlot();
         }
-        SearchInput.SendKeys(Keys.Enter);
+
+        _bar.Input.SendKeys(Keys.Enter);
     }
 
-    public void WaitForIdle(TimeSpan timeout)
+    public void WaitForStableResult(string expectedSignature, TimeSpan stabilityWindow)
     {
-        new WebDriverWait(driver, timeout).Until(d => !IsVisible(d, BlockingOverlayBy));
+        var stableSince = DateTime.UtcNow;
+        var stabilityWait = new WebDriverWait(_driver, stabilityWindow + TimeSpan.FromSeconds(1))
+        {
+            PollingInterval = TimeSpan.FromMilliseconds(50)
+        };
+
+        stabilityWait.Until(_ =>
+        {
+            if (_bar.IsLoading || !string.Equals(
+                    _results.Signature(),
+                    expectedSignature,
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "An empty search changed the result list or started loading products.");
+            }
+
+            return DateTime.UtcNow - stableSince >= stabilityWindow;
+        });
     }
 
-    public void ClearQueryWithButton()
-    {
-        var clearButton = _wait.Until(d => d.FindElements(ClearSearchBy)
-            .FirstOrDefault(element => element.Displayed && element.Enabled));
-        clearButton.Click();
-        _wait.Until(_ => Query.Length == 0);
-    }
+    public void WaitForIdle(TimeSpan timeout) =>
+        new WebDriverWait(_driver, timeout).Until(_ => !_bar.IsLoading);
+
+    public void ClearQueryWithButton() => _bar.ClearWithButton();
 
     public void SetStartsWith(bool enabled)
     {
         WaitUntilPageIsReady();
-        CloseHistory();
-        if (IsStartsWithEnabled == enabled) return;
-
-        var label = _wait.Until(d => d.FindElements(StartsWithLabelBy)
-            .FirstOrDefault(element => element.Displayed && element.Enabled));
-        label.Click();
-        _wait.Until(_ => IsStartsWithEnabled == enabled);
+        _history.Close();
+        _bar.SetStartsWith(enabled);
     }
 
-    public void CloseHistory()
-    {
-        if (!IsVisible(driver, HistoryContainerBy)) return;
+    public void CloseHistory() => _history.Close();
 
-        var button = _wait.Until(d => d.FindElements(HistoryButtonBy)
-            .FirstOrDefault(element => element.Displayed && element.Enabled));
-        button.Click();
-        _wait.Until(d => !IsVisible(d, HistoryContainerBy));
-    }
-
-    public IReadOnlyList<string> OpenHistory()
-    {
-        if (!IsVisible(driver, HistoryContainerBy))
-        {
-            var button = _wait.Until(d => d.FindElements(HistoryButtonBy)
-                .FirstOrDefault(element => element.Displayed && element.Enabled));
-            button.Click();
-        }
-
-        _wait.Until(d => IsVisible(d, HistoryContainerBy));
-        _wait.Until(_ => VisibleHistoryItems().Count > 0);
-        return VisibleHistoryItems();
-    }
+    public IReadOnlyList<string> OpenHistory() => _history.Open();
 
     public void SelectHistoryItem(string query)
     {
-        OpenHistory();
-        var itemBy = By.XPath(
-            $"//li[@ng-mousedown='onHistoryItemClick(phrase)' and " +
-            $"normalize-space(.)={ToXPathLiteral(query)}]");
-        var item = VisibleElement(itemBy);
+        var item = _history.Item(query);
         WaitForSearchSlot();
+        var mutationVersion = _mutations.Snapshot();
         item.Click();
-
-        _wait.Until(_ => string.Equals(Query, query, StringComparison.OrdinalIgnoreCase));
-        _wait.Until(d => !IsVisible(d, BlockingOverlayBy) && HasCompletedOutcome(d));
+        WaitForSearchCompletion(query, mutationVersion, requireQueryMatch: true);
     }
 
     public void ClearPerformanceLog()
     {
         if (!SupportsPerformanceLog) return;
-        _ = driver.Manage().Logs.GetLog(LogType.Performance);
+        _ = _driver.Manage().Logs.GetLog(LogType.Performance);
     }
 
     public IReadOnlyList<string> SearchRequestSignaturesContaining(string query)
     {
         if (!SupportsPerformanceLog) return [];
 
-        return driver.Manage().Logs.GetLog(LogType.Performance)
+        return _driver.Manage().Logs.GetLog(LogType.Performance)
             .Select(entry => RequestSignature(entry.Message, query))
             .Where(signature => signature is not null)
             .Select(signature => signature!)
@@ -223,12 +176,12 @@ public sealed class SearchResultsPage(IWebDriver driver, TimeSpan waitTimeout)
 
     public void PasteAndSearch(string query)
     {
-        if (driver is not ChromiumDriver chromiumDriver)
+        if (_driver is not ChromiumDriver chromiumDriver)
         {
             throw new NotSupportedException("Clipboard automation requires a Chromium driver.");
         }
 
-        var origin = new Uri(driver.Url).GetLeftPart(UriPartial.Authority);
+        var origin = new Uri(_driver.Url).GetLeftPart(UriPartial.Authority);
         chromiumDriver.ExecuteCdpCommand(
             "Browser.grantPermissions",
             new Dictionary<string, object?>
@@ -237,7 +190,7 @@ public sealed class SearchResultsPage(IWebDriver driver, TimeSpan waitTimeout)
                 ["permissions"] = new[] { "clipboardReadWrite", "clipboardSanitizedWrite" }
             });
 
-        var script = (IJavaScriptExecutor)driver;
+        var script = (IJavaScriptExecutor)_driver;
         var copied = script.ExecuteAsyncScript(
             "const value = arguments[0]; const done = arguments[arguments.length - 1];" +
             "navigator.clipboard.writeText(value).then(() => done(true)).catch(() => done(false));",
@@ -247,114 +200,92 @@ public sealed class SearchResultsPage(IWebDriver driver, TimeSpan waitTimeout)
             throw new InvalidOperationException("The browser clipboard could not be prepared.");
         }
 
-        var previousResult = FindVisibleStateElement();
-        ReplaceQuery(string.Empty);
-        SearchInput.Click();
-        new Actions(driver).KeyDown(Keys.Control).SendKeys("v").KeyUp(Keys.Control).Perform();
+        _bar.ReplaceQuery(string.Empty);
+        _bar.Input.Click();
+        new Actions(_driver).KeyDown(Keys.Control).SendKeys("v").KeyUp(Keys.Control).Perform();
         _wait.Until(_ => string.Equals(Query, query, StringComparison.Ordinal));
         WaitForSearchSlot();
-        SearchInput.SendKeys(Keys.Enter);
-        WaitForNewResult(previousResult);
+        var mutationVersion = _mutations.Snapshot();
+        _bar.Input.SendKeys(Keys.Enter);
+        WaitForSearchCompletion(query, mutationVersion, requireQueryMatch: true);
     }
 
-    public bool HasCompletedOutcome() => HasCompletedOutcome(driver);
+    public bool HasCompletedOutcome() => _results.HasCompletedOutcome;
 
-    public string ResultSignature()
+    public string ResultSignature() => _results.Signature();
+
+    public ProductResult GetProduct(string code) => _results.GetProduct(code);
+
+    public bool IsProductDisplayed(string code) => _results.IsProductDisplayed(code);
+
+    private void WaitForSearchCompletion(
+        string expectedQuery,
+        long mutationVersion,
+        string? expectedSummary = null,
+        bool requireQueryMatch = false)
     {
-        var summary = IsVisible(driver, ResultSummaryBy) ? ResultSummary : string.Empty;
-        return string.Join("|", summary, HasEmptyResult, string.Join(",", ProductCodes));
-    }
+        string? lastSignature = null;
+        DateTime? stableSince = null;
 
-    private void WaitForNewResult(IWebElement? previousResult)
-    {
-        if (previousResult is not null)
+        _wait.Until(_ =>
         {
-            try
+            _results.ThrowIfRateLimited();
+            if (_bar.IsLoading ||
+                !_results.HasCompletedOutcome ||
+                !_mutations.HasChangedSince(mutationVersion) ||
+                (requireQueryMatch &&
+                 !string.Equals(Query, expectedQuery, StringComparison.Ordinal)))
             {
-                new WebDriverWait(driver, TimeSpan.FromSeconds(1)).Until(d =>
-                    IsStale(previousResult) || IsVisible(d, BlockingOverlayBy));
+                lastSignature = null;
+                stableSince = null;
+                return false;
             }
-            catch (WebDriverTimeoutException)
-            {
-                // Angular may reuse the result element and finish before the overlay is observed.
-            }
-        }
 
-        _wait.Until(d =>
-        {
-            ThrowIfSearchRateLimited(d);
-            return !IsVisible(d, BlockingOverlayBy) && HasCompletedOutcome(d);
+            if (expectedSummary is not null &&
+                !string.Equals(ResultSummary, expectedSummary, StringComparison.Ordinal))
+            {
+                lastSignature = null;
+                stableSince = null;
+                return false;
+            }
+
+            var signature = _results.Signature();
+            if (!string.Equals(signature, lastSignature, StringComparison.Ordinal))
+            {
+                lastSignature = signature;
+                stableSince = DateTime.UtcNow;
+                return false;
+            }
+
+            return stableSince is not null && DateTime.UtcNow - stableSince >= ResultSettleTime;
         });
+    }
+
+    private void WaitUntilPageIsReady()
+    {
+        _results.ThrowIfRateLimited();
+        _bar.WaitUntilReady(_results.ThrowIfRateLimited);
     }
 
     private void WaitForSearchSlot()
     {
-        var remaining = MinimumSearchInterval - (DateTime.UtcNow - _lastSearchStartedUtc);
-        if (remaining > TimeSpan.Zero)
+        if (_minimumSearchInterval > TimeSpan.Zero)
         {
-            Thread.Sleep(remaining);
+            var remaining = _minimumSearchInterval - (DateTime.UtcNow - _lastSearchStartedUtc);
+            if (remaining > TimeSpan.Zero)
+            {
+                var intervalWait = new WebDriverWait(
+                    _driver,
+                    remaining + TimeSpan.FromSeconds(1))
+                {
+                    PollingInterval = TimeSpan.FromMilliseconds(50)
+                };
+                intervalWait.Until(_ =>
+                    DateTime.UtcNow - _lastSearchStartedUtc >= _minimumSearchInterval);
+            }
         }
 
         _lastSearchStartedUtc = DateTime.UtcNow;
-    }
-
-    public ProductResult GetProduct(string code)
-    {
-        var productCodeBy = By.XPath(
-            $"//a[contains(concat(' ', normalize-space(@class), ' '), ' searchProdCard ') " +
-            $"and normalize-space(.)={ToXPathLiteral(code)}]");
-        var codeElement = VisibleElement(productCodeBy);
-        var result = codeElement.FindElement(By.XPath(
-            "ancestor::*[@ng-repeat='item in searchresult.Items'][1]"));
-
-        var brand = result.FindElements(By.CssSelector(".brandSearch"))
-            .Select(element => NormalizeWhitespace(element.Text))
-            .First(text => text.Length > 0);
-
-        return new ProductResult(
-            Code: NormalizeWhitespace(codeElement.Text),
-            Card: NormalizeWhitespace(result.FindElement(By.CssSelector(".searchCard span")).Text),
-            Description: NormalizeWhitespace(result.FindElement(By.CssSelector(".searchDescrip")).Text),
-            Brand: brand);
-    }
-
-    public bool IsProductDisplayed(string code)
-    {
-        var by = By.XPath(
-            $"//a[contains(concat(' ', normalize-space(@class), ' '), ' searchProdCard ') " +
-            $"and normalize-space(.)={ToXPathLiteral(code)}]");
-        return IsVisible(driver, by);
-    }
-
-    private IWebElement SearchInput => _wait.Until(d =>
-        d.FindElements(SearchInputBy)
-            .FirstOrDefault(element => element.Displayed && element.Enabled));
-
-    private IWebElement VisibleElement(By by) => _wait.Until(d =>
-        d.FindElements(by).FirstOrDefault(element => element.Displayed));
-
-    private void WaitUntilPageIsReady() =>
-        _wait.Until(d =>
-        {
-            ThrowIfSearchRateLimited(d);
-            return !IsVisible(d, BlockingOverlayBy);
-        });
-
-    private IWebElement? FindVisibleStateElement() =>
-        driver.FindElements(StandardResultBy)
-            .Concat(driver.FindElements(EmptyResultBy))
-            .Concat(driver.FindElements(StartsWithCodesBy))
-            .FirstOrDefault(element => element.Displayed);
-
-    private void ReplaceQuery(string query)
-    {
-        var input = SearchInput;
-        input.SendKeys(Keys.Control + "a");
-        input.SendKeys(Keys.Backspace);
-        if (query.Length > 0)
-        {
-            input.SendKeys(query);
-        }
     }
 
     private static string? RequestSignature(string message, string query)
@@ -387,69 +318,4 @@ public sealed class SearchResultsPage(IWebDriver driver, TimeSpan waitTimeout)
             return null;
         }
     }
-
-    private IReadOnlyList<string> VisibleHistoryItems() =>
-        driver.FindElements(HistoryItemsBy)
-            .Select(element => NormalizeWhitespace(element.Text))
-            .Where(text => text.Length > 0)
-            .ToArray();
-
-    private static bool HasCompletedOutcome(IWebDriver webDriver) =>
-        IsVisible(webDriver, ResultSummaryBy) ||
-        IsVisible(webDriver, EmptyResultBy) ||
-        IsVisible(webDriver, StartsWithSummaryBy) ||
-        IsVisible(webDriver, StartsWithCodesBy);
-
-    private static void ThrowIfSearchRateLimited(IWebDriver webDriver)
-    {
-        if (IsVisible(webDriver, SearchRateLimitBy))
-        {
-            throw new InvalidOperationException(
-                "Тестовый сервер отклонил поиск: превышен лимит поисковых запросов. " +
-                "Дождитесь сброса лимита перед следующим E2E-прогоном.");
-        }
-    }
-
-    private static bool IsVisible(IWebDriver webDriver, By by)
-    {
-        try
-        {
-            return webDriver.FindElements(by).Any(element => element.Displayed);
-        }
-        catch (StaleElementReferenceException)
-        {
-            return false;
-        }
-    }
-
-    private static bool IsStale(IWebElement element)
-    {
-        try
-        {
-            _ = element.Enabled;
-            return false;
-        }
-        catch (StaleElementReferenceException)
-        {
-            return true;
-        }
-    }
-
-    private static string NormalizeWhitespace(string value) =>
-        Regex.Replace(value.Trim(), @"\s+", " ");
-
-    private static string ToXPathLiteral(string value)
-    {
-        if (!value.Contains('\'')) return $"'{value}'";
-        if (!value.Contains('"')) return $"\"{value}\"";
-
-        var parts = value.Split('\'');
-        return $"concat('{string.Join("', \"'\", '", parts)}')";
-    }
 }
-
-public sealed record ProductResult(
-    string Code,
-    string Card,
-    string Description,
-    string Brand);

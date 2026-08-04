@@ -3,13 +3,45 @@
   "environments": {
     "Test": {
       "baseUrl": "https://test.omega.page/",
+      "searchMinimumIntervalSeconds": 5,
       "loginEmail": "web@omega-auto.biz",
-      "loginPassword": "<test password>"
+      "loginPassword": "<test password>",
+      "search": {
+        "productCode": "OC90",
+        "productCard": "4610495",
+        "productDescription": "Фільтр оливний LANOS, AVEO, LACETTI, NUBIRA, NEXIA (вир-во KNECHT-MAHLE)",
+        "productBrand": "KNECHT/MAHLE",
+        "alternativeProductCode": "OC90OF",
+        "partialDescription": "Фільтр оливний LANOS",
+        "cyrillicQuery": "Фільтр оливний",
+        "cyrillicExpectedText": "Фільтр",
+        "latinQuery": "LANOS",
+        "latinExpectedText": "LANOS",
+        "punctuatedProductCode": "23.129.02",
+        "missingProductQuery": "zz-no-product-987654321",
+        "searchPlaceholder": "VIN, Держ. номер, OE, найменування, картка, код"
+      }
     },
     "Production": {
       "baseUrl": "<production URL>",
+      "searchMinimumIntervalSeconds": 10,
       "loginEmail": "<production client login>",
-      "loginPassword": "<production client password>"
+      "loginPassword": "<production client password>",
+      "search": {
+        "productCode": "<production product code>",
+        "productCard": "<production product card>",
+        "productDescription": "<production product description>",
+        "productBrand": "<production product brand>",
+        "alternativeProductCode": "<production alternative product code>",
+        "partialDescription": "<production partial description>",
+        "cyrillicQuery": "<production localized query>",
+        "cyrillicExpectedText": "<production localized expected text>",
+        "latinQuery": "<production latin query>",
+        "latinExpectedText": "<production latin expected text>",
+        "punctuatedProductCode": "<production punctuated product code>",
+        "missingProductQuery": "<production missing product query>",
+        "searchPlaceholder": "<production search placeholder>"
+      }
     }
   }
 }
