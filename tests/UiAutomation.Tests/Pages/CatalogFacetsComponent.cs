@@ -12,10 +12,15 @@ internal sealed class CatalogFacetsComponent(IWebDriver driver, WebDriverWait wa
         By.CssSelector("a[ng-click='filterModel.resetModel()']");
     private static readonly By OptionLabelBy =
         By.CssSelector("span.text[ng-click*='selectedLabelClick']");
-    private static readonly By SelectedFacetCheckboxBy =
-        By.CssSelector("div.accordion-newFilter input[type='checkbox']:checked");
+    private static readonly By SelectedFacetInputBy = By.CssSelector(
+        "div.accordion-newFilter input[type='checkbox']:checked, " +
+        "div.accordion-newFilter input[type='radio']:checked");
     private static readonly By InStockCheckboxBy =
         By.CssSelector("input[ng-model='filterModel.rest']");
+    private static readonly By SaleCheckboxBy =
+        By.CssSelector("input[ng-model='filterModel.isSale']");
+    private static readonly By PromotionalCheckboxBy =
+        By.CssSelector("input[ng-model='filterModel.showOnlyStock']");
     private static readonly By ListViewToggleBy = By.CssSelector("a[ng-click='setView(1)']");
 
     public bool HasActiveFilters
@@ -30,10 +35,16 @@ internal sealed class CatalogFacetsComponent(IWebDriver driver, WebDriverWait wa
     }
 
     public int SelectedFacetValuesCount =>
-        driver.FindElements(SelectedFacetCheckboxBy).Count(element => element.Selected);
+        driver.FindElements(SelectedFacetInputBy).Count(element => element.Selected);
 
     public bool IsInStockOnlyEnabled =>
         driver.FindElements(InStockCheckboxBy).FirstOrDefault()?.Selected == true;
+
+    public bool IsSaleOnlyEnabled =>
+        driver.FindElements(SaleCheckboxBy).FirstOrDefault()?.Selected == true;
+
+    public bool IsPromotionalOnlyEnabled =>
+        driver.FindElements(PromotionalCheckboxBy).FirstOrDefault()?.Selected == true;
 
     public FacetOption SelectMostRestrictiveFacetOption(string facetTitle)
     {
@@ -78,12 +89,12 @@ internal sealed class CatalogFacetsComponent(IWebDriver driver, WebDriverWait wa
 
     public void EnableInStockOnly()
     {
-        var checkbox = wait.Until(d => d.FindElements(InStockCheckboxBy).FirstOrDefault());
-        if (checkbox.Selected) return;
-
-        driver.ClickRobustly(checkbox);
-        wait.Until(_ => checkbox.Selected);
+        EnableCheckbox(InStockCheckboxBy);
     }
+
+    public void EnableSaleOnly() => EnableCheckbox(SaleCheckboxBy);
+
+    public void EnablePromotionalOnly() => EnableCheckbox(PromotionalCheckboxBy);
 
     public void Apply()
     {
@@ -107,13 +118,24 @@ internal sealed class CatalogFacetsComponent(IWebDriver driver, WebDriverWait wa
     {
         driver.ClickRobustly(optionLabel);
 
-        var checkbox = optionLabel
+        var input = optionLabel
             .FindElement(By.XPath(
-                "ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' checkbox ')][1]"))
-            .FindElement(By.CssSelector("input[type='checkbox']"));
-        wait.Until(_ => checkbox.Selected);
+                "ancestor::div[" +
+                "contains(concat(' ', normalize-space(@class), ' '), ' checkbox ') or " +
+                "contains(concat(' ', normalize-space(@class), ' '), ' radio ')][1]"))
+            .FindElement(By.CssSelector("input[type='checkbox'], input[type='radio']"));
+        wait.Until(_ => input.Selected);
 
         return parsed;
+    }
+
+    private void EnableCheckbox(By checkboxBy)
+    {
+        var checkbox = wait.Until(d => d.FindElements(checkboxBy).FirstOrDefault());
+        if (checkbox.Selected) return;
+
+        driver.ClickRobustly(checkbox);
+        wait.Until(_ => checkbox.Selected);
     }
 
     private IWebElement FacetPanel(string title) => wait.Until(d =>

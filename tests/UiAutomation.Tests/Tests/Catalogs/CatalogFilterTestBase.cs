@@ -50,6 +50,8 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
                 $"Applying brand '{brand.Core}' did not change products for '{Catalog.Name}'.");
             Assert.That(Filter.SelectedFacetValuesCount, Is.GreaterThan(0),
                 $"Brand '{brand.Core}' is not selected in '{Catalog.Name}'.");
+            Assert.That(Filter.HasAppliedFilter(brand.Value), Is.True,
+                $"Brand '{brand.Value}' is absent from the applied filters for '{Catalog.Name}'.");
             Assert.That(brands, Is.Not.Empty);
             Assert.That(
                 brands.All(value => value.Contains(brand.Core, StringComparison.OrdinalIgnoreCase)),
@@ -61,7 +63,7 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
         });
     }
 
-    protected void AssertNarrowingFacet(string facetTitle, string? optionValue = null)
+    protected FacetOption AssertNarrowingFacet(string facetTitle, string? optionValue = null)
     {
         var unfilteredSignature = Filter.ResultSignature;
         var option = optionValue is null
@@ -77,6 +79,9 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
                 $"'{facetTitle}' filter was not registered as active for '{Catalog.Name}'.");
             Assert.That(Filter.SelectedFacetValuesCount, Is.GreaterThan(0),
                 $"'{facetTitle}' = '{option.Value}' is not selected for '{Catalog.Name}'.");
+            Assert.That(Filter.HasAppliedFilter(option.Value), Is.True,
+                $"'{facetTitle}' = '{option.Value}' is absent from the applied filters " +
+                $"for '{Catalog.Name}'.");
             Assert.That(filteredSignature, Is.Not.EqualTo(unfilteredSignature),
                 $"'{facetTitle}' = '{option.Value}' did not change products for '{Catalog.Name}'.");
             Assert.That(Filter.ResultCount, Is.GreaterThan(0),
@@ -84,6 +89,8 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
             Assert.That(Filter.ResultCount, Is.LessThanOrEqualTo(option.Count),
                 $"More products shown ({Filter.ResultCount}) than the facet promised ({option.Count}).");
         });
+
+        return option;
     }
 
     protected void AssertInStockFilter()
@@ -100,6 +107,8 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
                 $"The in-stock filter was not registered as active for '{Catalog.Name}'.");
             Assert.That(Filter.IsInStockOnlyEnabled, Is.True,
                 $"The in-stock checkbox is not selected for '{Catalog.Name}'.");
+            Assert.That(Filter.HasAppliedFilter("Тільки товар у наявності"), Is.True,
+                $"The in-stock filter is absent from the applied filters for '{Catalog.Name}'.");
             Assert.That(Filter.ResultCount, Is.GreaterThan(0),
                 $"No products remained after the in-stock filter for '{Catalog.Name}'.");
             Assert.That(withoutStock, Is.Empty,

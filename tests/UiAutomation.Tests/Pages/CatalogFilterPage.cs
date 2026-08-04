@@ -36,7 +36,13 @@ public sealed class CatalogFilterPage
 
     public bool IsInStockOnlyEnabled => _facets.IsInStockOnlyEnabled;
 
+    public bool IsSaleOnlyEnabled => _facets.IsSaleOnlyEnabled;
+
+    public bool IsPromotionalOnlyEnabled => _facets.IsPromotionalOnlyEnabled;
+
     public string ResultSignature => _results.Signature();
+
+    public bool HasAppliedFilter(string value) => _results.HasAppliedFilter(value);
 
     public void WaitUntilLoaded() => _results.WaitUntilLoaded();
 
@@ -50,7 +56,14 @@ public sealed class CatalogFilterPage
 
     public IReadOnlyList<string> ProductsWithoutStock() => _results.ProductsWithoutStock();
 
+    public IReadOnlyList<string> ProductsWithoutSaleMarker() =>
+        _results.ProductsWithoutSaleMarker();
+
     public void EnableInStockOnly() => _facets.EnableInStockOnly();
+
+    public void EnableSaleOnly() => _facets.EnableSaleOnly();
+
+    public void EnablePromotionalOnly() => _facets.EnablePromotionalOnly();
 
     public void ApplyFilters(bool requireResultChange = true)
     {

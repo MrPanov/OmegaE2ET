@@ -14,6 +14,10 @@ internal sealed class CatalogResultsComponent(IWebDriver driver, WebDriverWait w
     private static readonly By ProductDescriptionBy = By.CssSelector(".searchDescrip");
     private static readonly By ProductBrandBy = By.CssSelector(".brandSearch");
     private static readonly By StockQuantityBy = By.CssSelector("span[ng-style*='war.rest']");
+    private static readonly By AppliedFilterTagBy =
+        By.CssSelector("li[ng-repeat='item in Value'] span.filter-icon");
+    private static readonly By SaleMarkerBy =
+        By.CssSelector("li[ng-if='productInfo.IsSale > 0']");
 
     public IReadOnlyList<string> ProductCodes => driver.VisibleTexts(ProductCardBy);
 
@@ -22,6 +26,10 @@ internal sealed class CatalogResultsComponent(IWebDriver driver, WebDriverWait w
     public IReadOnlyList<string> ProductBrands => driver.VisibleTexts(ProductBrandBy);
 
     public int ResultCount => ProductCodes.Count;
+
+    public bool HasAppliedFilter(string value) => driver
+        .VisibleTexts(AppliedFilterTagBy)
+        .Any(tag => string.Equals(tag, value, StringComparison.OrdinalIgnoreCase));
 
     public string Signature() => string.Join(
         "|",
@@ -83,6 +91,23 @@ internal sealed class CatalogResultsComponent(IWebDriver driver, WebDriverWait w
             var quantities = row.FindElements(StockQuantityBy)
                 .Select(cell => LeadingInt(cell.Text));
             if (!quantities.Any(quantity => quantity >= 1))
+            {
+                missing.Add(UiText.NormalizeWhitespace(card.Text));
+            }
+        }
+
+        return missing;
+    }
+
+    public IReadOnlyList<string> ProductsWithoutSaleMarker()
+    {
+        var missing = new List<string>();
+        foreach (var card in driver.FindElements(ProductCardBy).Where(element => element.Displayed))
+        {
+            var product = card.FindElement(By.XPath(
+                "ancestor::div[" +
+                "contains(concat(' ', normalize-space(@class), ' '), ' searchBlock ')][1]"));
+            if (product.FindElements(SaleMarkerBy).Count == 0)
             {
                 missing.Add(UiText.NormalizeWhitespace(card.Text));
             }
