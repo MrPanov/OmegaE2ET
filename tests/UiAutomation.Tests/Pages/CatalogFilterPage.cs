@@ -59,7 +59,8 @@ public sealed class CatalogFilterPage
 
     public void SwitchToListView() => _facets.SwitchToListView();
 
-    public IReadOnlyList<string> ProductsWithoutStock() => _results.ProductsWithoutStock();
+    public IReadOnlyList<string> ProductsWithoutStock(int productLimit) =>
+        _results.ProductsWithoutStock(productLimit);
 
     public IReadOnlyList<string> ProductsWithoutSaleMarker() =>
         _results.ProductsWithoutSaleMarker();

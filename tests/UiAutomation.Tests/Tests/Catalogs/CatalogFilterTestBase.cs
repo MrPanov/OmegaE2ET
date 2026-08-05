@@ -12,6 +12,7 @@ namespace UiAutomation.Tests.Tests.Catalogs;
 public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
 {
     private const string BrandFacet = "Бренд";
+    private const int InStockProductsToCheck = 5;
 
     private CatalogMenuPage _catalogMenu = null!;
 
@@ -123,7 +124,7 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
             "Тільки товар у наявності",
             requireResultChange: false);
 
-        var withoutStock = Filter.ProductsWithoutStock();
+        var withoutStock = Filter.ProductsWithoutStock(InStockProductsToCheck);
 
         Assert.Multiple(() =>
         {
@@ -133,10 +134,12 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
                 $"The in-stock checkbox is not selected for '{Catalog.Name}'.");
             Assert.That(Filter.HasAppliedFilter("Тільки товар у наявності"), Is.True,
                 $"The in-stock filter is absent from the applied filters for '{Catalog.Name}'.");
-            Assert.That(Filter.ResultCount, Is.GreaterThan(0),
-                $"No products remained after the in-stock filter for '{Catalog.Name}'.");
+            Assert.That(Filter.ResultCount, Is.GreaterThanOrEqualTo(InStockProductsToCheck),
+                $"Fewer than {InStockProductsToCheck} products remained after the in-stock " +
+                $"filter for '{Catalog.Name}'.");
             Assert.That(withoutStock, Is.Empty,
-                $"Products shown with zero stock at the selected warehouse " +
+                $"Products among the first {InStockProductsToCheck} results were shown with " +
+                $"zero stock at the selected warehouse " +
                 $"for '{Catalog.Name}': " +
                 string.Join(" | ", withoutStock));
         });

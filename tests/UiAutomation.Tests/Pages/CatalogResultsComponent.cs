@@ -105,10 +105,12 @@ internal sealed class CatalogResultsComponent(IWebDriver driver, WebDriverWait w
         }
     }
 
-    public IReadOnlyList<string> ProductsWithoutStock()
+    public IReadOnlyList<string> ProductsWithoutStock(int productLimit)
     {
         var missing = new List<string>();
-        foreach (var card in driver.FindElements(ProductCardBy).Where(element => element.Displayed))
+        foreach (var card in driver.FindElements(ProductCardBy)
+                     .Where(element => element.Displayed)
+                     .Take(productLimit))
         {
             var row = card.FindElement(By.XPath(
                 "ancestor::*[.//span[contains(@ng-style, 'war.rest')]][1]"));

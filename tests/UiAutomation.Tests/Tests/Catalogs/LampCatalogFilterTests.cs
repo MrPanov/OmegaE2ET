@@ -95,8 +95,8 @@ public sealed class LampCatalogFilterTests : CatalogFilterTestBase
         AssertDescriptionsContainAfterFacet("Ксенон", "D1R", "D1R");
 
     /// <summary>
-    /// Включает фильтр «Тільки товар у наявності» и проверяет, что каждый
-    /// показанный товар имеет положительный остаток хотя бы на одном складе.
+    /// Включает фильтр «Тільки товар у наявності» и проверяет, что первые пять
+    /// товаров имеют положительный остаток на выбранном складе.
     /// </summary>
     [Test]
     [Property("TestCaseId", "CAT-COM-005")]
