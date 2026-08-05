@@ -27,16 +27,15 @@ public sealed class LampCatalogFilterTests : CatalogFilterTestBase
 
     /// <summary>
     /// Выбирает тип транспорта «Легкова», применяет фильтр и проверяет, что он
-    /// отображается среди применённых фильтров и изменяет непустую выдачу ламп.
+    /// остаётся выбранным, отображается среди применённых и выдача не пуста.
+    /// Первые товары могут совпасть с исходной выдачей, если они уже подходят.
     /// </summary>
     [Test]
     [Property("TestCaseId", "LAMP-001")]
-    public void PassengerVehicleFormFactorChangesLampResults()
+    public void PassengerVehicleFormFactorIsAppliedToLampResults()
     {
-        var unfilteredSignature = Filter.ResultSignature;
-
         Filter.SelectPassengerFormFactor();
-        Filter.ApplyFilters("Легкова");
+        Filter.ApplyFilters("Легкова", requireResultChange: false);
 
         Assert.Multiple(() =>
         {
@@ -44,8 +43,6 @@ public sealed class LampCatalogFilterTests : CatalogFilterTestBase
                 "The passenger-vehicle form factor is not selected.");
             Assert.That(Filter.HasAppliedFilter("Легкова"), Is.True,
                 "The passenger-vehicle form factor is absent from the applied filters.");
-            Assert.That(Filter.ResultSignature, Is.Not.EqualTo(unfilteredSignature),
-                "The passenger-vehicle form factor did not change the lamp results.");
             Assert.That(Filter.ResultCount, Is.GreaterThan(0),
                 "No lamps remained after selecting the passenger-vehicle form factor.");
         });
@@ -61,13 +58,14 @@ public sealed class LampCatalogFilterTests : CatalogFilterTestBase
         AssertNarrowingFacet("Авто", "ALFA ROMEO");
 
     /// <summary>
-    /// Выбирает мощность 0.5 W и проверяет, что мощность указана в описании
-    /// каждой лампы, оставшейся после применения фильтра.
+    /// Выбирает мощность 0.5 W и проверяет, что значение выбрано, отображается
+    /// среди применённых фильтров и сужает выдачу до заявленного фасетом числа.
+    /// Мощность не обязана выводиться в кратком названии каждого товара.
     /// </summary>
     [Test]
     [Property("TestCaseId", "LAMP-001")]
-    public void PowerFilterKeepsOnlyLampsWithSelectedPower() =>
-        AssertDescriptionsContainAfterFacet("Потужність", "0.5", "0.5W");
+    public void PowerFilterNarrowsLampResults() =>
+        AssertNarrowingFacet("Потужність", "0.5");
 
     /// <summary>
     /// Выбирает цоколь B10d и проверяет, что этот цоколь указан в описании
@@ -113,8 +111,8 @@ public sealed class LampCatalogFilterTests : CatalogFilterTestBase
     public void SaleFilterShowsOnlyMarkedDownLamps() => AssertSaleFilter();
 
     /// <summary>
-    /// Включает фильтр акционных товаров и проверяет, что он остаётся выбранным,
-    /// отображается среди применённых и изменяет непустую выдачу ламп.
+    /// Включает фильтр акционных товаров и проверяет его применение. Если в
+    /// окружении нет акционных ламп, тест пропускается как не имеющий данных.
     /// </summary>
     [Test]
     [Property("TestCaseId", "CAT-COM-005")]

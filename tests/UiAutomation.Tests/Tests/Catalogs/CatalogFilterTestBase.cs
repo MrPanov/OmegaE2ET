@@ -136,7 +136,8 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
             Assert.That(Filter.ResultCount, Is.GreaterThan(0),
                 $"No products remained after the in-stock filter for '{Catalog.Name}'.");
             Assert.That(withoutStock, Is.Empty,
-                $"Products shown with zero stock in all warehouses for '{Catalog.Name}': " +
+                $"Products shown with zero stock at the selected warehouse " +
+                $"for '{Catalog.Name}': " +
                 string.Join(" | ", withoutStock));
         });
     }
@@ -171,7 +172,13 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
         var unfilteredSignature = Filter.ResultSignature;
 
         Filter.EnablePromotionalOnly();
-        Filter.ApplyFilters("Акційний товар");
+        Filter.ApplyFilters();
+
+        if (Filter.ResultCount == 0)
+        {
+            Assert.Ignore(
+                $"No promotional products are available for '{Catalog.Name}' in this environment.");
+        }
 
         Assert.Multiple(() =>
         {

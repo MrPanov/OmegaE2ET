@@ -15,7 +15,7 @@ internal sealed class CatalogResultsComponent(IWebDriver driver, WebDriverWait w
     private static readonly By ProductBrandBy = By.CssSelector(".brandSearch");
     private static readonly By StockQuantityBy = By.CssSelector("span[ng-style*='war.rest']");
     private static readonly By AppliedFilterTagBy =
-        By.CssSelector("li[ng-repeat='item in Value'] span.filter-icon");
+        By.CssSelector(".filters-labels-main span.filter-icon");
     private static readonly By SaleMarkerBy =
         By.CssSelector("li[ng-if='productInfo.IsSale > 0']");
 
@@ -27,9 +27,10 @@ internal sealed class CatalogResultsComponent(IWebDriver driver, WebDriverWait w
 
     public int ResultCount => ProductCodes.Count;
 
-    public bool HasAppliedFilter(string value) => driver
-        .VisibleTexts(AppliedFilterTagBy)
-        .Any(tag => string.Equals(tag, value, StringComparison.OrdinalIgnoreCase));
+    public bool HasAppliedFilter(string value) => AppliedFilters
+        .Any(tag => FilterValuesMatch(tag, value));
+
+    private IReadOnlyList<string> AppliedFilters => driver.VisibleTexts(AppliedFilterTagBy);
 
     public string Signature() => string.Join(
         "|",
@@ -53,41 +54,55 @@ internal sealed class CatalogResultsComponent(IWebDriver driver, WebDriverWait w
         string? lastSignature = null;
         DateTime? stableSince = null;
 
-        wait.Until(d =>
+        try
         {
-            if (d.IsVisible(OverlayBy) || !mutations.HasChangedSince(version))
+            wait.Until(d =>
             {
-                lastSignature = null;
-                stableSince = null;
-                return false;
-            }
+                if (d.IsVisible(OverlayBy) || !mutations.HasChangedSince(version))
+                {
+                    lastSignature = null;
+                    stableSince = null;
+                    return false;
+                }
 
-            var signature = Signature();
-            if (expectedAppliedFilter is not null &&
-                !HasAppliedFilter(expectedAppliedFilter))
-            {
-                lastSignature = null;
-                stableSince = null;
-                return false;
-            }
+                var signature = Signature();
+                if (expectedAppliedFilter is not null &&
+                    !HasAppliedFilter(expectedAppliedFilter))
+                {
+                    lastSignature = null;
+                    stableSince = null;
+                    return false;
+                }
 
-            if (requireResultChange &&
-                string.Equals(signature, previousSignature, StringComparison.Ordinal))
-            {
-                lastSignature = null;
-                stableSince = null;
-                return false;
-            }
+                if (requireResultChange &&
+                    string.Equals(signature, previousSignature, StringComparison.Ordinal))
+                {
+                    lastSignature = null;
+                    stableSince = null;
+                    return false;
+                }
 
-            if (!string.Equals(signature, lastSignature, StringComparison.Ordinal))
-            {
-                lastSignature = signature;
-                stableSince = DateTime.UtcNow;
-                return false;
-            }
+                if (!string.Equals(signature, lastSignature, StringComparison.Ordinal))
+                {
+                    lastSignature = signature;
+                    stableSince = DateTime.UtcNow;
+                    return false;
+                }
 
-            return stableSince is not null && DateTime.UtcNow - stableSince >= ResultSettleTime;
-        });
+                return stableSince is not null &&
+                       DateTime.UtcNow - stableSince >= ResultSettleTime;
+            });
+        }
+        catch (WebDriverTimeoutException exception) when (expectedAppliedFilter is not null)
+        {
+            var applied = AppliedFilters.Count == 0
+                ? "<none>"
+                : string.Join(", ", AppliedFilters);
+            throw new WebDriverTimeoutException(
+                $"Timed out waiting for applied filter '{expectedAppliedFilter}'. " +
+                $"Current applied filters: {applied}. Visible products: {ResultCount}.",
+                exception);
+        }
     }
 
     public IReadOnlyList<string> ProductsWithoutStock()
@@ -129,5 +144,16 @@ internal sealed class CatalogResultsComponent(IWebDriver driver, WebDriverWait w
     {
         var match = Regex.Match(text, @"\d+");
         return match.Success ? int.Parse(match.Value) : 0;
+    }
+
+    private static bool FilterValuesMatch(string actual, string expected)
+    {
+        if (string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return actual.StartsWith($"{expected} (", StringComparison.OrdinalIgnoreCase) ||
+               expected.StartsWith($"{actual} (", StringComparison.OrdinalIgnoreCase);
     }
 }
