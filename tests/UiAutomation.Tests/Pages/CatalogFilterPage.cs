@@ -26,9 +26,14 @@ public sealed class CatalogFilterPage
 
     public IReadOnlyList<string> ProductDescriptions => _results.ProductDescriptions;
 
+    public IReadOnlyList<string> PrimaryProductDescriptions =>
+        _results.PrimaryProductDescriptions;
+
     public IReadOnlyList<string> ProductBrands => _results.ProductBrands;
 
     public int ResultCount => _results.ResultCount;
+
+    public int PrimaryResultCount => _results.PrimaryResultCount;
 
     public bool HasActiveFilters => _facets.HasActiveFilters;
 

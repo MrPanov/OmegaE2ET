@@ -59,8 +59,9 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
                 Is.True,
                 $"Some '{Catalog.Name}' results are not brand '{brand.Core}': " +
                 string.Join(", ", brands.Distinct()));
-            Assert.That(Filter.ResultCount, Is.LessThanOrEqualTo(brand.Count),
-                $"More products shown ({Filter.ResultCount}) than the facet promised ({brand.Count}).");
+            Assert.That(Filter.PrimaryResultCount, Is.LessThanOrEqualTo(brand.Count),
+                $"More primary products shown ({Filter.PrimaryResultCount}) than the facet " +
+                $"promised ({brand.Count}); analog products are excluded from this count.");
         });
     }
 
@@ -87,8 +88,9 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
                 $"'{facetTitle}' = '{option.Value}' did not change products for '{Catalog.Name}'.");
             Assert.That(Filter.ResultCount, Is.GreaterThan(0),
                 $"'{facetTitle}' = '{option.Value}' returned no products for '{Catalog.Name}'.");
-            Assert.That(Filter.ResultCount, Is.LessThanOrEqualTo(option.Count),
-                $"More products shown ({Filter.ResultCount}) than the facet promised ({option.Count}).");
+            Assert.That(Filter.PrimaryResultCount, Is.LessThanOrEqualTo(option.Count),
+                $"More primary products shown ({Filter.PrimaryResultCount}) than the facet " +
+                $"promised ({option.Count}); analog products are excluded from this count.");
         });
 
         return option;

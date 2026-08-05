@@ -5,7 +5,8 @@ namespace UiAutomation.Tests.Tests.Catalogs;
 /// <summary>
 /// Covers every available control in the lamp catalog's "Основні фільтри"
 /// block except the dependent model facet. Power, socket, voltage and xenon are
-/// also verified against every visible product description.
+/// also verified against every primary product description; analog suggestions
+/// are excluded because catalog facets do not filter them.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -69,7 +70,8 @@ public sealed class LampCatalogFilterTests : CatalogFilterTestBase
 
     /// <summary>
     /// Выбирает цоколь B10d и проверяет, что этот цоколь указан в описании
-    /// каждой лампы в отфильтрованной выдаче.
+    /// каждой лампы основной выдачи. Предложения из блока «Аналоги» не входят
+    /// в область действия фильтра.
     /// </summary>
     [Test]
     [Property("TestCaseId", "LAMP-001")]
@@ -78,8 +80,8 @@ public sealed class LampCatalogFilterTests : CatalogFilterTestBase
 
     /// <summary>
     /// Выбирает напряжение 24 V и проверяет, что значение 24 присутствует в
-    /// описании каждой лампы. Интерфейс может показывать его как 24V, 24В или
-    /// без единицы измерения, например «T5 1,2W 24».
+    /// описании каждой лампы основной выдачи. Интерфейс может показывать его как
+    /// 24V, 24В или без единицы измерения, например «T5 1,2W 24».
     /// </summary>
     [Test]
     [Property("TestCaseId", "LAMP-001")]
@@ -87,8 +89,8 @@ public sealed class LampCatalogFilterTests : CatalogFilterTestBase
         AssertDescriptionsContainAfterFacet("Напруга", "24", "24");
 
     /// <summary>
-    /// Выбирает ксеноновый тип D1R и проверяет, что D1R указан в описании
-    /// каждой лампы, оставшейся в результатах.
+    /// Выбирает ксеноновый тип D1R и проверяет, что D1R указан в описании каждой
+    /// лампы основной выдачи. Товары из блока «Аналоги» могут иметь другой тип.
     /// </summary>
     [Test]
     [Property("TestCaseId", "LAMP-001")]
@@ -136,7 +138,7 @@ public sealed class LampCatalogFilterTests : CatalogFilterTestBase
         AssertNarrowingFacet(facetTitle, optionValue);
 
         var normalizedTokens = expectedTokens.Select(NormalizeTechnicalText).ToArray();
-        var mismatches = Filter.ProductDescriptions
+        var mismatches = Filter.PrimaryProductDescriptions
             .Where(description =>
             {
                 var normalized = NormalizeTechnicalText(description);

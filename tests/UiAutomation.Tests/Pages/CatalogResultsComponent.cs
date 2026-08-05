@@ -11,7 +11,13 @@ internal sealed class CatalogResultsComponent(IWebDriver driver, WebDriverWait w
 
     private static readonly By OverlayBy = By.CssSelector("div.block-ui-overlay");
     private static readonly By ProductCardBy = By.CssSelector("a.searchProdCard");
+    private static readonly By PrimaryProductCardBy = By.XPath(
+        "//a[contains(concat(' ', normalize-space(@class), ' '), ' searchProdCard ')]" +
+        "[ancestor::*[@ng-repeat][1][@ng-repeat='item in searchresult.Items']]");
     private static readonly By ProductDescriptionBy = By.CssSelector(".searchDescrip");
+    private static readonly By PrimaryProductDescriptionBy = By.XPath(
+        "//*[contains(concat(' ', normalize-space(@class), ' '), ' searchDescrip ')]" +
+        "[ancestor::*[@ng-repeat][1][@ng-repeat='item in searchresult.Items']]");
     private static readonly By ProductBrandBy = By.CssSelector(".brandSearch");
     private static readonly By StockQuantityBy = By.CssSelector("span[ng-style*='war.rest']");
     private static readonly By AppliedFilterTagBy =
@@ -23,9 +29,15 @@ internal sealed class CatalogResultsComponent(IWebDriver driver, WebDriverWait w
 
     public IReadOnlyList<string> ProductDescriptions => driver.VisibleTexts(ProductDescriptionBy);
 
+    public IReadOnlyList<string> PrimaryProductDescriptions =>
+        driver.VisibleTexts(PrimaryProductDescriptionBy);
+
     public IReadOnlyList<string> ProductBrands => driver.VisibleTexts(ProductBrandBy);
 
     public int ResultCount => ProductCodes.Count;
+
+    public int PrimaryResultCount => driver.FindElements(PrimaryProductCardBy)
+        .Count(element => element.Displayed);
 
     public bool HasAppliedFilter(string value) => AppliedFilters
         .Any(tag => FilterValuesMatch(tag, value));
