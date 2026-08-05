@@ -16,9 +16,14 @@ public sealed class AgroBeltCatalogFilterTests : CatalogFilterTestBase
     [Property("TestCaseId", "CAT-COM-005")]
     public void AppliedBrandFilterKeepsOnlyMatchingAgroBelts() => AssertBrandFilter();
 
+    /// <summary>
+    /// Открывает фильтр «Тип», выбирает первый вариант в порядке отображения
+    /// списка и проверяет, что он применяется и сужает выдачу агроремней.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "CAT-COM-005")]
-    public void TypeFilterNarrowsAgroBeltResults() => AssertNarrowingFacet("Тип");
+    public void TypeFilterNarrowsAgroBeltResults() =>
+        AssertFirstListedNarrowingFacet("Тип");
 
     [Test]
     [Property("TestCaseId", "CAT-COM-005")]

@@ -53,8 +53,11 @@ public sealed class CatalogFilterPage
 
     public void WaitUntilLoaded() => _results.WaitUntilLoaded();
 
-    public FacetOption SelectFirstFacetOption(string facetTitle) =>
+    public FacetOption SelectMostRestrictiveFacetOption(string facetTitle) =>
         _facets.SelectMostRestrictiveFacetOption(facetTitle);
+
+    public FacetOption SelectFirstListedFacetOption(string facetTitle) =>
+        _facets.SelectFirstListedFacetOption(facetTitle);
 
     public FacetOption SelectFirstAvailableFacetOption(string facetTitle) =>
         _facets.SelectFirstAvailableFacetOption(facetTitle);

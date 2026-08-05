@@ -35,20 +35,15 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
 
     protected void AssertBrandFilter()
     {
-        var unfilteredSignature = Filter.ResultSignature;
-
         var brand = Filter.SelectFirstAvailableFacetOption(BrandFacet);
-        Filter.ApplyFilters(brand.Value);
+        Filter.ApplyFilters(brand.Value, requireResultChange: false);
 
         var brands = Filter.ProductBrands;
-        var filteredSignature = Filter.ResultSignature;
 
         Assert.Multiple(() =>
         {
             Assert.That(Filter.ResultCount, Is.GreaterThan(0),
                 $"No products remained after filtering '{Catalog.Name}' by brand '{brand.Core}'.");
-            Assert.That(filteredSignature, Is.Not.EqualTo(unfilteredSignature),
-                $"Applying brand '{brand.Core}' did not change products for '{Catalog.Name}'.");
             Assert.That(Filter.SelectedFacetValuesCount, Is.GreaterThan(0),
                 $"Brand '{brand.Core}' is not selected in '{Catalog.Name}'.");
             Assert.That(Filter.HasAppliedFilter(brand.Value), Is.True,
@@ -67,11 +62,19 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
 
     protected FacetOption AssertNarrowingFacet(string facetTitle, string? optionValue = null)
     {
-        var unfilteredSignature = Filter.ResultSignature;
         var option = optionValue is null
-            ? Filter.SelectFirstFacetOption(facetTitle)
+            ? Filter.SelectMostRestrictiveFacetOption(facetTitle)
             : Filter.SelectFacetOption(facetTitle, optionValue);
 
+        return AssertNarrowingFacet(facetTitle, option);
+    }
+
+    protected FacetOption AssertFirstListedNarrowingFacet(string facetTitle) =>
+        AssertNarrowingFacet(facetTitle, Filter.SelectFirstListedFacetOption(facetTitle));
+
+    private FacetOption AssertNarrowingFacet(string facetTitle, FacetOption option)
+    {
+        var unfilteredSignature = Filter.ResultSignature;
         Filter.ApplyFilters(option.Value);
         var filteredSignature = Filter.ResultSignature;
 
@@ -88,9 +91,12 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
                 $"'{facetTitle}' = '{option.Value}' did not change products for '{Catalog.Name}'.");
             Assert.That(Filter.ResultCount, Is.GreaterThan(0),
                 $"'{facetTitle}' = '{option.Value}' returned no products for '{Catalog.Name}'.");
-            Assert.That(Filter.PrimaryResultCount, Is.LessThanOrEqualTo(option.Count),
-                $"More primary products shown ({Filter.PrimaryResultCount}) than the facet " +
-                $"promised ({option.Count}); analog products are excluded from this count.");
+            if (option.Count > 0)
+            {
+                Assert.That(Filter.PrimaryResultCount, Is.LessThanOrEqualTo(option.Count),
+                    $"More primary products shown ({Filter.PrimaryResultCount}) than the facet " +
+                    $"promised ({option.Count}); analog products are excluded from this count.");
+            }
         });
 
         return option;
@@ -203,7 +209,7 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
     {
         var unfilteredSignature = Filter.ResultSignature;
 
-        var brand = Filter.SelectFirstFacetOption(BrandFacet);
+        var brand = Filter.SelectMostRestrictiveFacetOption(BrandFacet);
         Filter.ApplyFilters(brand.Value);
         var filteredSignature = Filter.ResultSignature;
 

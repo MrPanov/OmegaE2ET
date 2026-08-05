@@ -60,10 +60,23 @@ internal sealed class CatalogFacetsComponent(IWebDriver driver, WebDriverWait wa
             .Where(element => element.Displayed && element.Text.Trim().Length > 0)
             .Select(element => (Element: element, Option: ParseOption(
                 UiText.NormalizeWhitespace(element.Text))))
-            .Where(item => item.Option.Count > 0)
-            .OrderBy(item => item.Option.Count)
+            .OrderBy(item => item.Option.Count > 0 ? 0 : 1)
+            .ThenBy(item => item.Option.Count > 0 ? item.Option.Count : int.MaxValue)
             .Select(item => item.Element)
             .FirstOrDefault());
+
+        return SelectOption(
+            optionLabel,
+            ParseOption(UiText.NormalizeWhitespace(optionLabel.Text)));
+    }
+
+    public FacetOption SelectFirstListedFacetOption(string facetTitle)
+    {
+        var panel = FacetPanel(facetTitle);
+        ExpandPanel(panel);
+
+        var optionLabel = wait.Until(_ => panel.FindElements(OptionLabelBy)
+            .FirstOrDefault(element => element.Displayed && element.Text.Trim().Length > 0));
 
         return SelectOption(
             optionLabel,
