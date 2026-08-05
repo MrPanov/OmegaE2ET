@@ -77,13 +77,14 @@ public sealed class LampCatalogFilterTests : CatalogFilterTestBase
         AssertDescriptionsContainAfterFacet("Цоколь", "B10d", "B10D");
 
     /// <summary>
-    /// Выбирает напряжение 24 V и проверяет, что значение 24 V или 24 В
-    /// присутствует в описании каждой показанной лампы.
+    /// Выбирает напряжение 24 V и проверяет, что значение 24 присутствует в
+    /// описании каждой лампы. Интерфейс может показывать его как 24V, 24В или
+    /// без единицы измерения, например «T5 1,2W 24».
     /// </summary>
     [Test]
     [Property("TestCaseId", "LAMP-001")]
     public void VoltageFilterKeepsOnlyLampsWithSelectedVoltage() =>
-        AssertDescriptionsContainAfterFacet("Напруга", "24", "24V", "24В");
+        AssertDescriptionsContainAfterFacet("Напруга", "24", "24");
 
     /// <summary>
     /// Выбирает ксеноновый тип D1R и проверяет, что D1R указан в описании
