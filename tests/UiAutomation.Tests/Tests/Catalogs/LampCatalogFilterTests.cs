@@ -17,10 +17,18 @@ public sealed class LampCatalogFilterTests : CatalogFilterTestBase
 {
     protected override CatalogDefinition Catalog => CatalogDefinitions.Lamps;
 
+    /// <summary>
+    /// Выбирает бренд в фильтре ламп, применяет его и проверяет, что в выдаче
+    /// остались только товары выбранного бренда.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "CAT-COM-005")]
     public void AppliedBrandFilterKeepsOnlyMatchingLamps() => AssertBrandFilter();
 
+    /// <summary>
+    /// Выбирает тип транспорта «Легкова», применяет фильтр и проверяет, что он
+    /// отображается среди применённых фильтров и изменяет непустую выдачу ламп.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "LAMP-001")]
     public void PassengerVehicleFormFactorChangesLampResults()
@@ -43,44 +51,80 @@ public sealed class LampCatalogFilterTests : CatalogFilterTestBase
         });
     }
 
+    /// <summary>
+    /// Выбирает автомобиль ALFA ROMEO и проверяет, что фильтр применяется,
+    /// сужает выдачу и оставляет хотя бы одну подходящую лампу.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "LAMP-001")]
     public void VehicleFilterNarrowsLampResults() =>
         AssertNarrowingFacet("Авто", "ALFA ROMEO");
 
+    /// <summary>
+    /// Выбирает мощность 0.5 W и проверяет, что мощность указана в описании
+    /// каждой лампы, оставшейся после применения фильтра.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "LAMP-001")]
     public void PowerFilterKeepsOnlyLampsWithSelectedPower() =>
         AssertDescriptionsContainAfterFacet("Потужність", "0.5", "0.5W");
 
+    /// <summary>
+    /// Выбирает цоколь B10d и проверяет, что этот цоколь указан в описании
+    /// каждой лампы в отфильтрованной выдаче.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "LAMP-001")]
     public void SocketFilterKeepsOnlyLampsWithSelectedSocket() =>
         AssertDescriptionsContainAfterFacet("Цоколь", "B10d", "B10D");
 
+    /// <summary>
+    /// Выбирает напряжение 24 V и проверяет, что значение 24 V или 24 В
+    /// присутствует в описании каждой показанной лампы.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "LAMP-001")]
     public void VoltageFilterKeepsOnlyLampsWithSelectedVoltage() =>
         AssertDescriptionsContainAfterFacet("Напруга", "24", "24V", "24В");
 
+    /// <summary>
+    /// Выбирает ксеноновый тип D1R и проверяет, что D1R указан в описании
+    /// каждой лампы, оставшейся в результатах.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "LAMP-001")]
     public void XenonFilterKeepsOnlyLampsWithSelectedSocketType() =>
         AssertDescriptionsContainAfterFacet("Ксенон", "D1R", "D1R");
 
+    /// <summary>
+    /// Включает фильтр «Тільки товар у наявності» и проверяет, что каждый
+    /// показанный товар имеет положительный остаток хотя бы на одном складе.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "CAT-COM-005")]
     public void InStockFilterShowsOnlyAvailableLamps() => AssertInStockFilter();
 
+    /// <summary>
+    /// Включает фильтр распродажи и проверяет, что выдача изменилась, не пуста,
+    /// а у каждой показанной лампы присутствует признак распродажи.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "CAT-COM-005")]
     public void SaleFilterShowsOnlyMarkedDownLamps() => AssertSaleFilter();
 
+    /// <summary>
+    /// Включает фильтр акционных товаров и проверяет, что он остаётся выбранным,
+    /// отображается среди применённых и изменяет непустую выдачу ламп.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "CAT-COM-005")]
     public void PromotionalFilterChangesResultsAndRemainsApplied() =>
         AssertPromotionalFilter();
 
+    /// <summary>
+    /// Применяет фильтр ламп, затем сбрасывает его и проверяет, что выбранные
+    /// параметры очищены, а исходная выдача восстановлена.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "CAT-COM-008")]
     public void ResettingFiltersClearsLampSelection() => AssertFilterReset();
