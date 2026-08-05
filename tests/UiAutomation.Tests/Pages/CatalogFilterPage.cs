@@ -70,6 +70,9 @@ public sealed class CatalogFilterPage
     public IReadOnlyList<string> ProductsWithoutStock(int productLimit) =>
         _results.ProductsWithoutStock(productLimit);
 
+    public IReadOnlyList<string> PrimaryProductsWithoutBrand(string expectedBrand) =>
+        _results.PrimaryProductsWithoutBrand(expectedBrand);
+
     public IReadOnlyList<string> ProductsWithoutSaleMarker() =>
         _results.ProductsWithoutSaleMarker();
 

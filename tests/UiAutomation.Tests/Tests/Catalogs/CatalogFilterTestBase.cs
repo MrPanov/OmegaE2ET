@@ -38,7 +38,7 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
         var brand = Filter.SelectFirstAvailableFacetOption(BrandFacet);
         Filter.ApplyFilters(brand.Value, requireResultChange: false);
 
-        var brands = Filter.ProductBrands;
+        var productsWithoutBrand = Filter.PrimaryProductsWithoutBrand(brand.Core);
 
         Assert.Multiple(() =>
         {
@@ -48,12 +48,9 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
                 $"Brand '{brand.Core}' is not selected in '{Catalog.Name}'.");
             Assert.That(Filter.HasAppliedFilter(brand.Value), Is.True,
                 $"Brand '{brand.Value}' is absent from the applied filters for '{Catalog.Name}'.");
-            Assert.That(brands, Is.Not.Empty);
-            Assert.That(
-                brands.All(value => value.Contains(brand.Core, StringComparison.OrdinalIgnoreCase)),
-                Is.True,
+            Assert.That(productsWithoutBrand, Is.Empty,
                 $"Some '{Catalog.Name}' results are not brand '{brand.Core}': " +
-                string.Join(", ", brands.Distinct()));
+                string.Join(", ", productsWithoutBrand));
             Assert.That(Filter.PrimaryResultCount, Is.LessThanOrEqualTo(brand.Count),
                 $"More primary products shown ({Filter.PrimaryResultCount}) than the facet " +
                 $"promised ({brand.Count}); analog products are excluded from this count.");

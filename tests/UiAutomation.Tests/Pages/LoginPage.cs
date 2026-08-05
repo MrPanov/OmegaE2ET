@@ -7,6 +7,8 @@ namespace UiAutomation.Tests.Pages;
 public sealed class LoginPage(IWebDriver driver, TimeSpan waitTimeout)
 {
     private readonly WebDriverWait _wait = new(driver, waitTimeout);
+    private readonly TimeSpan _openAttemptTimeout = TimeSpan.FromMilliseconds(
+        Math.Max(1000, waitTimeout.TotalMilliseconds / 2));
 
     private IWebElement EmailInput =>
         _wait.Until(d => d.FindElement(By.Id("loginInputEmail")));
@@ -22,10 +24,26 @@ public sealed class LoginPage(IWebDriver driver, TimeSpan waitTimeout)
 
     public void Open(string baseUrl)
     {
-        driver.Navigate().GoToUrl(baseUrl);
-        _wait.Until(d =>
-            d.IsVisible(By.Id("loginInputEmail")) ||
-            d.IsVisible(By.Id("headerInputSearch")));
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            driver.Navigate().GoToUrl(baseUrl);
+
+            try
+            {
+                new WebDriverWait(driver, _openAttemptTimeout).Until(IsLoginOrApplicationVisible);
+                return;
+            }
+            catch (WebDriverTimeoutException) when (attempt == 1)
+            {
+                // Иногда стартовая SPA-страница остаётся полностью пустой.
+                // Повторная навигация восстанавливает загрузку без увеличения
+                // общего времени ожидания, заданного в TestSettings.
+            }
+        }
+
+        throw new WebDriverTimeoutException(
+            $"Neither the login form nor the authenticated application appeared after two " +
+            $"attempts. Current URL: '{driver.Url}'. Page title: '{driver.Title}'.");
     }
 
     public void Login(string email, string password)
@@ -81,5 +99,9 @@ public sealed class LoginPage(IWebDriver driver, TimeSpan waitTimeout)
 
     public string PasswordInputType =>
         PasswordInput.GetAttribute("type") ?? string.Empty;
+
+    private static bool IsLoginOrApplicationVisible(IWebDriver webDriver) =>
+        webDriver.IsVisible(By.Id("loginInputEmail")) ||
+        webDriver.IsVisible(By.Id("headerInputSearch"));
 
 }

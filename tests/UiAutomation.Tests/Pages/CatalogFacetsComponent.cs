@@ -12,6 +12,9 @@ internal sealed class CatalogFacetsComponent(IWebDriver driver, WebDriverWait wa
         By.CssSelector("a[ng-click='filterModel.resetModel()']");
     private static readonly By OptionLabelBy =
         By.CssSelector("span.text[ng-click*='selectedLabelClick']");
+    private static readonly By OptionContainerBy = By.CssSelector("div.checkbox, div.radio");
+    private static readonly By OptionInputBy =
+        By.CssSelector("input[type='checkbox'], input[type='radio']");
     private static readonly By SelectedFacetInputBy = By.CssSelector(
         "div.accordion-newFilter input[type='checkbox']:checked, " +
         "div.accordion-newFilter input[type='radio']:checked");
@@ -75,12 +78,18 @@ internal sealed class CatalogFacetsComponent(IWebDriver driver, WebDriverWait wa
         var panel = FacetPanel(facetTitle);
         ExpandPanel(panel);
 
-        var optionLabel = wait.Until(_ => panel.FindElements(OptionLabelBy)
-            .FirstOrDefault(element => element.Displayed && element.Text.Trim().Length > 0));
+        var optionContainer = wait.Until(_ => panel.FindElements(OptionContainerBy)
+            .FirstOrDefault(element =>
+                element.Displayed &&
+                element.Text.Trim().Length > 0 &&
+                element.FindElements(OptionInputBy).Any(input => input.Enabled)));
 
-        return SelectOption(
-            optionLabel,
-            ParseOption(UiText.NormalizeWhitespace(optionLabel.Text)));
+        var parsed = ParseOption(UiText.NormalizeWhitespace(optionContainer.Text));
+        var input = optionContainer.FindElement(OptionInputBy);
+        driver.ClickRobustly(input);
+        wait.Until(_ => input.Selected);
+
+        return parsed;
     }
 
     public FacetOption SelectFirstAvailableFacetOption(string facetTitle)
@@ -168,7 +177,7 @@ internal sealed class CatalogFacetsComponent(IWebDriver driver, WebDriverWait wa
                 "ancestor::div[" +
                 "contains(concat(' ', normalize-space(@class), ' '), ' checkbox ') or " +
                 "contains(concat(' ', normalize-space(@class), ' '), ' radio ')][1]"))
-            .FindElement(By.CssSelector("input[type='checkbox'], input[type='radio']"));
+            .FindElement(OptionInputBy);
         wait.Until(_ => input.Selected);
 
         return parsed;

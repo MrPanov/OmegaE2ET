@@ -137,6 +137,29 @@ internal sealed class CatalogResultsComponent(IWebDriver driver, WebDriverWait w
         return missing;
     }
 
+    public IReadOnlyList<string> PrimaryProductsWithoutBrand(string expectedBrand)
+    {
+        var mismatches = new List<string>();
+        foreach (var card in driver.FindElements(PrimaryProductCardBy)
+                     .Where(element => element.Displayed))
+        {
+            var product = card.FindElement(By.XPath(
+                "ancestor::div[" +
+                "contains(concat(' ', normalize-space(@class), ' '), ' searchBlock ')][1]"));
+            var brandTexts = product.FindElements(ProductBrandBy)
+                .Where(element => element.Displayed)
+                .Select(element => UiText.NormalizeWhitespace(element.Text));
+
+            if (!brandTexts.Any(value =>
+                    value.Contains(expectedBrand, StringComparison.OrdinalIgnoreCase)))
+            {
+                mismatches.Add(UiText.NormalizeWhitespace(card.Text));
+            }
+        }
+
+        return mismatches;
+    }
+
     public IReadOnlyList<string> ProductsWithoutSaleMarker()
     {
         var missing = new List<string>();
