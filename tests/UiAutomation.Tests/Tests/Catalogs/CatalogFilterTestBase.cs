@@ -93,6 +93,28 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
         return option;
     }
 
+    protected FacetOption AssertDescriptionsMatchAfterFacet(
+        string facetTitle,
+        string optionValue,
+        Func<string, bool> matches,
+        string expectedDescription)
+    {
+        var option = AssertNarrowingFacet(facetTitle, optionValue);
+        var descriptions = Filter.ProductDescriptions;
+        var mismatches = descriptions.Where(description => !matches(description)).ToArray();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(descriptions, Is.Not.Empty,
+                $"No product descriptions were rendered for '{Catalog.Name}'.");
+            Assert.That(mismatches, Is.Empty,
+                $"Products without {expectedDescription} were shown for '{Catalog.Name}': " +
+                string.Join(" | ", mismatches));
+        });
+
+        return option;
+    }
+
     protected void AssertInStockFilter()
     {
         Filter.SwitchToListView();
