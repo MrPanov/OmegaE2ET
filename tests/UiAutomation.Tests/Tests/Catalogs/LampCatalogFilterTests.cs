@@ -36,7 +36,7 @@ public sealed class LampCatalogFilterTests : CatalogFilterTestBase
         var unfilteredSignature = Filter.ResultSignature;
 
         Filter.SelectPassengerFormFactor();
-        Filter.ApplyFilters();
+        Filter.ApplyFilters("Легкова");
 
         Assert.Multiple(() =>
         {

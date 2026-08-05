@@ -47,7 +47,8 @@ internal sealed class CatalogResultsComponent(IWebDriver driver, WebDriverWait w
         string previousSignature,
         DomMutationTracker mutations,
         long version,
-        bool requireResultChange)
+        bool requireResultChange,
+        string? expectedAppliedFilter = null)
     {
         string? lastSignature = null;
         DateTime? stableSince = null;
@@ -62,6 +63,14 @@ internal sealed class CatalogResultsComponent(IWebDriver driver, WebDriverWait w
             }
 
             var signature = Signature();
+            if (expectedAppliedFilter is not null &&
+                !HasAppliedFilter(expectedAppliedFilter))
+            {
+                lastSignature = null;
+                stableSince = null;
+                return false;
+            }
+
             if (requireResultChange &&
                 string.Equals(signature, previousSignature, StringComparison.Ordinal))
             {

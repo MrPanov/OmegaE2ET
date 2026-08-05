@@ -36,7 +36,7 @@ public sealed class TyreCatalogFilterTests : CatalogFilterTestBase
     {
         var unfilteredSignature = Filter.ResultSignature;
         var diameter = Filter.SelectFacetOption("Діаметр", "16");
-        Filter.ApplyFilters();
+        Filter.ApplyFilters(diameter.Value);
 
         var descriptions = Filter.ProductDescriptions;
         var pattern = new Regex($@"R{Regex.Escape(diameter.Value)}(?!\d)");
@@ -63,7 +63,7 @@ public sealed class TyreCatalogFilterTests : CatalogFilterTestBase
     {
         var unfilteredSignature = Filter.ResultSignature;
         var size = Filter.SelectFacetOption("Типорозмір", "155/65R14");
-        Filter.ApplyFilters();
+        Filter.ApplyFilters(size.Value);
 
         var descriptions = Filter.ProductDescriptions;
 

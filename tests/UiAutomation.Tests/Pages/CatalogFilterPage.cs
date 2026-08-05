@@ -71,6 +71,13 @@ public sealed class CatalogFilterPage
 
     public void ApplyFilters(bool requireResultChange = true)
     {
+        ApplyFilters(expectedAppliedFilter: null, requireResultChange);
+    }
+
+    public void ApplyFilters(
+        string? expectedAppliedFilter,
+        bool requireResultChange = true)
+    {
         var previousSignature = ResultSignature;
         var mutationVersion = _mutations.Snapshot();
         _facets.Apply();
@@ -78,7 +85,8 @@ public sealed class CatalogFilterPage
             previousSignature,
             _mutations,
             mutationVersion,
-            requireResultChange);
+            requireResultChange,
+            expectedAppliedFilter);
     }
 
     public void ResetFilters()

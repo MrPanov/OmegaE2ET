@@ -37,7 +37,7 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
         var unfilteredSignature = Filter.ResultSignature;
 
         var brand = Filter.SelectFirstFacetOption(BrandFacet);
-        Filter.ApplyFilters();
+        Filter.ApplyFilters(brand.Value);
 
         var brands = Filter.ProductBrands;
         var filteredSignature = Filter.ResultSignature;
@@ -70,7 +70,7 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
             ? Filter.SelectFirstFacetOption(facetTitle)
             : Filter.SelectFacetOption(facetTitle, optionValue);
 
-        Filter.ApplyFilters();
+        Filter.ApplyFilters(option.Value);
         var filteredSignature = Filter.ResultSignature;
 
         Assert.Multiple(() =>
@@ -119,7 +119,9 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
     {
         Filter.SwitchToListView();
         Filter.EnableInStockOnly();
-        Filter.ApplyFilters(requireResultChange: false);
+        Filter.ApplyFilters(
+            "Тільки товар у наявності",
+            requireResultChange: false);
 
         var withoutStock = Filter.ProductsWithoutStock();
 
@@ -144,7 +146,7 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
         var unfilteredSignature = Filter.ResultSignature;
 
         Filter.EnableSaleOnly();
-        Filter.ApplyFilters();
+        Filter.ApplyFilters("Розпродаж");
 
         var withoutSaleMarker = Filter.ProductsWithoutSaleMarker();
 
@@ -169,7 +171,7 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
         var unfilteredSignature = Filter.ResultSignature;
 
         Filter.EnablePromotionalOnly();
-        Filter.ApplyFilters();
+        Filter.ApplyFilters("Акційний товар");
 
         Assert.Multiple(() =>
         {
@@ -189,8 +191,8 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
     {
         var unfilteredSignature = Filter.ResultSignature;
 
-        Filter.SelectFirstFacetOption(BrandFacet);
-        Filter.ApplyFilters();
+        var brand = Filter.SelectFirstFacetOption(BrandFacet);
+        Filter.ApplyFilters(brand.Value);
         var filteredSignature = Filter.ResultSignature;
 
         Assert.That(Filter.HasActiveFilters, Is.True,
