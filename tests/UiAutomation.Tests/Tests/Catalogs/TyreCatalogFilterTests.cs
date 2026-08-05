@@ -18,10 +18,18 @@ public sealed class TyreCatalogFilterTests : CatalogFilterTestBase
 {
     protected override CatalogDefinition Catalog => CatalogDefinitions.Tyres;
 
+    /// <summary>
+    /// Выбирает бренд в фильтре шин, применяет его и проверяет, что в выдаче
+    /// остались только шины выбранного бренда.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "CAT-COM-005")]
     public void AppliedBrandFilterKeepsOnlyMatchingTyres() => AssertBrandFilter();
 
+    /// <summary>
+    /// Выбирает диаметр R16, применяет фильтр и проверяет, что выдача изменилась,
+    /// не пуста, а в описании каждой показанной шины указан диаметр R16.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "TYRE-001")]
     public void DiameterFilterKeepsOnlyTyresOfThatDiameter()
@@ -45,6 +53,10 @@ public sealed class TyreCatalogFilterTests : CatalogFilterTestBase
         });
     }
 
+    /// <summary>
+    /// Выбирает типоразмер 155/65R14, применяет фильтр и проверяет, что выдача
+    /// изменилась, а выбранный типоразмер указан в описании каждой шины.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "TYRE-001")]
     public void SizeFilterKeepsOnlyTyresOfThatSize()
@@ -73,20 +85,36 @@ public sealed class TyreCatalogFilterTests : CatalogFilterTestBase
         });
     }
 
+    /// <summary>
+    /// Выбирает сезон «Зима» и проверяет, что фильтр отображается среди
+    /// применённых, сужает выдачу и оставляет хотя бы одну шину.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "TYRE-002")]
     public void SeasonFilterIsAppliedAndReturnsBoundedResults() =>
         AssertNarrowingFacet("Сезонність", "Зима");
 
+    /// <summary>
+    /// Выбирает назначение «Легкова» и проверяет, что фильтр применяется,
+    /// сужает выдачу и оставляет хотя бы одну подходящую шину.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "TYRE-002")]
     public void PurposeFilterIsAppliedAndReturnsBoundedResults() =>
         AssertNarrowingFacet("Призначення", "Легкова");
 
+    /// <summary>
+    /// Включает фильтр «Тільки товар у наявності» и проверяет, что каждая
+    /// показанная шина имеет положительный остаток хотя бы на одном складе.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "CAT-COM-005")]
     public void InStockFilterShowsOnlyAvailableTyres() => AssertInStockFilter();
 
+    /// <summary>
+    /// Применяет фильтр шин, затем сбрасывает его и проверяет, что выбранные
+    /// параметры очищены, а исходная выдача восстановлена.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "CAT-COM-008")]
     public void ResettingFiltersClearsTyreSelection() => AssertFilterReset();
