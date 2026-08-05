@@ -51,6 +51,9 @@ public sealed class CatalogFilterPage
     public FacetOption SelectFirstFacetOption(string facetTitle) =>
         _facets.SelectMostRestrictiveFacetOption(facetTitle);
 
+    public FacetOption SelectFirstAvailableFacetOption(string facetTitle) =>
+        _facets.SelectFirstAvailableFacetOption(facetTitle);
+
     public FacetOption SelectFacetOption(string facetTitle, string optionValue) =>
         _facets.SelectFacetOption(facetTitle, optionValue);
 

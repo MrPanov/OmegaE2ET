@@ -36,7 +36,7 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
     {
         var unfilteredSignature = Filter.ResultSignature;
 
-        var brand = Filter.SelectFirstFacetOption(BrandFacet);
+        var brand = Filter.SelectFirstAvailableFacetOption(BrandFacet);
         Filter.ApplyFilters(brand.Value);
 
         var brands = Filter.ProductBrands;

@@ -70,6 +70,24 @@ internal sealed class CatalogFacetsComponent(IWebDriver driver, WebDriverWait wa
             ParseOption(UiText.NormalizeWhitespace(optionLabel.Text)));
     }
 
+    public FacetOption SelectFirstAvailableFacetOption(string facetTitle)
+    {
+        var panel = FacetPanel(facetTitle);
+        ExpandPanel(panel);
+
+        var optionLabel = wait.Until(_ => panel.FindElements(OptionLabelBy)
+            .Where(element => element.Displayed && element.Text.Trim().Length > 0)
+            .Select(element => (Element: element, Option: ParseOption(
+                UiText.NormalizeWhitespace(element.Text))))
+            .Where(item => item.Option.Count > 0)
+            .Select(item => item.Element)
+            .FirstOrDefault());
+
+        return SelectOption(
+            optionLabel,
+            ParseOption(UiText.NormalizeWhitespace(optionLabel.Text)));
+    }
+
     public FacetOption SelectFacetOption(string facetTitle, string optionValue)
     {
         var panel = FacetPanel(facetTitle);
