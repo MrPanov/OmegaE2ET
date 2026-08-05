@@ -21,6 +21,8 @@ internal sealed class CatalogFacetsComponent(IWebDriver driver, WebDriverWait wa
         By.CssSelector("input[ng-model='filterModel.isSale']");
     private static readonly By PromotionalCheckboxBy =
         By.CssSelector("input[ng-model='filterModel.showOnlyStock']");
+    private static readonly By PassengerFormFactorBy = By.CssSelector(
+        "input[ng-model='parent.filterModel.formFactor'][value='0']");
     private static readonly By ListViewToggleBy = By.CssSelector("a[ng-click='setView(1)']");
 
     public bool HasActiveFilters
@@ -45,6 +47,9 @@ internal sealed class CatalogFacetsComponent(IWebDriver driver, WebDriverWait wa
 
     public bool IsPromotionalOnlyEnabled =>
         driver.FindElements(PromotionalCheckboxBy).FirstOrDefault()?.Selected == true;
+
+    public bool IsPassengerFormFactorSelected =>
+        driver.FindElements(PassengerFormFactorBy).FirstOrDefault()?.Selected == true;
 
     public FacetOption SelectMostRestrictiveFacetOption(string facetTitle)
     {
@@ -95,6 +100,15 @@ internal sealed class CatalogFacetsComponent(IWebDriver driver, WebDriverWait wa
     public void EnableSaleOnly() => EnableCheckbox(SaleCheckboxBy);
 
     public void EnablePromotionalOnly() => EnableCheckbox(PromotionalCheckboxBy);
+
+    public void SelectPassengerFormFactor()
+    {
+        var radio = wait.Until(d => d.FindElements(PassengerFormFactorBy).FirstOrDefault());
+        if (radio.Selected) return;
+
+        driver.ClickRobustly(radio);
+        wait.Until(_ => radio.Selected);
+    }
 
     public void Apply()
     {

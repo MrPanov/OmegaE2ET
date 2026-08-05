@@ -117,6 +117,52 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
         });
     }
 
+    protected void AssertSaleFilter()
+    {
+        var unfilteredSignature = Filter.ResultSignature;
+
+        Filter.EnableSaleOnly();
+        Filter.ApplyFilters();
+
+        var withoutSaleMarker = Filter.ProductsWithoutSaleMarker();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Filter.IsSaleOnlyEnabled, Is.True,
+                $"The sale checkbox is not selected for '{Catalog.Name}'.");
+            Assert.That(Filter.HasAppliedFilter("Розпродаж"), Is.True,
+                $"The sale filter is absent from the applied filters for '{Catalog.Name}'.");
+            Assert.That(Filter.ResultSignature, Is.Not.EqualTo(unfilteredSignature),
+                $"The sale filter did not change products for '{Catalog.Name}'.");
+            Assert.That(Filter.ResultCount, Is.GreaterThan(0),
+                $"No products remained after the sale filter for '{Catalog.Name}'.");
+            Assert.That(withoutSaleMarker, Is.Empty,
+                $"Products without a sale marker were shown for '{Catalog.Name}': " +
+                string.Join(" | ", withoutSaleMarker));
+        });
+    }
+
+    protected void AssertPromotionalFilter()
+    {
+        var unfilteredSignature = Filter.ResultSignature;
+
+        Filter.EnablePromotionalOnly();
+        Filter.ApplyFilters();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Filter.IsPromotionalOnlyEnabled, Is.True,
+                $"The promotional-products checkbox is not selected for '{Catalog.Name}'.");
+            Assert.That(Filter.HasAppliedFilter("Акційний товар"), Is.True,
+                $"The promotional-products filter is absent from the applied filters " +
+                $"for '{Catalog.Name}'.");
+            Assert.That(Filter.ResultSignature, Is.Not.EqualTo(unfilteredSignature),
+                $"The promotional-products filter did not change products for '{Catalog.Name}'.");
+            Assert.That(Filter.ResultCount, Is.GreaterThan(0),
+                $"No products remained after the promotional-products filter for '{Catalog.Name}'.");
+        });
+    }
+
     protected void AssertFilterReset()
     {
         var unfilteredSignature = Filter.ResultSignature;

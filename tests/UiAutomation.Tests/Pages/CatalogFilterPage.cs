@@ -40,6 +40,8 @@ public sealed class CatalogFilterPage
 
     public bool IsPromotionalOnlyEnabled => _facets.IsPromotionalOnlyEnabled;
 
+    public bool IsPassengerFormFactorSelected => _facets.IsPassengerFormFactorSelected;
+
     public string ResultSignature => _results.Signature();
 
     public bool HasAppliedFilter(string value) => _results.HasAppliedFilter(value);
@@ -64,6 +66,8 @@ public sealed class CatalogFilterPage
     public void EnableSaleOnly() => _facets.EnableSaleOnly();
 
     public void EnablePromotionalOnly() => _facets.EnablePromotionalOnly();
+
+    public void SelectPassengerFormFactor() => _facets.SelectPassengerFormFactor();
 
     public void ApplyFilters(bool requireResultChange = true)
     {

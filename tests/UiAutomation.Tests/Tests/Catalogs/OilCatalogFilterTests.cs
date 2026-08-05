@@ -110,52 +110,12 @@ public sealed class OilCatalogFilterTests : CatalogFilterTestBase
 
     [Test]
     [Property("TestCaseId", "CAT-COM-005")]
-    public void SaleFilterShowsOnlyMarkedDownOils()
-    {
-        var unfilteredSignature = Filter.ResultSignature;
-
-        Filter.EnableSaleOnly();
-        Filter.ApplyFilters();
-
-        var withoutSaleMarker = Filter.ProductsWithoutSaleMarker();
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(Filter.IsSaleOnlyEnabled, Is.True,
-                "The sale checkbox is not selected.");
-            Assert.That(Filter.HasAppliedFilter("Розпродаж"), Is.True,
-                "The sale filter is absent from the applied filters.");
-            Assert.That(Filter.ResultSignature, Is.Not.EqualTo(unfilteredSignature),
-                "The sale filter did not change the oil results.");
-            Assert.That(Filter.ResultCount, Is.GreaterThan(0),
-                "No oils remained after applying the sale filter.");
-            Assert.That(withoutSaleMarker, Is.Empty,
-                "Products without a sale marker were shown: " +
-                string.Join(" | ", withoutSaleMarker));
-        });
-    }
+    public void SaleFilterShowsOnlyMarkedDownOils() => AssertSaleFilter();
 
     [Test]
     [Property("TestCaseId", "CAT-COM-005")]
-    public void PromotionalFilterChangesResultsAndRemainsApplied()
-    {
-        var unfilteredSignature = Filter.ResultSignature;
-
-        Filter.EnablePromotionalOnly();
-        Filter.ApplyFilters();
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(Filter.IsPromotionalOnlyEnabled, Is.True,
-                "The promotional-products checkbox is not selected.");
-            Assert.That(Filter.HasAppliedFilter("Акційний товар"), Is.True,
-                "The promotional-products filter is absent from the applied filters.");
-            Assert.That(Filter.ResultSignature, Is.Not.EqualTo(unfilteredSignature),
-                "The promotional-products filter did not change the oil results.");
-            Assert.That(Filter.ResultCount, Is.GreaterThan(0),
-                "No oils remained after applying the promotional-products filter.");
-        });
-    }
+    public void PromotionalFilterChangesResultsAndRemainsApplied() =>
+        AssertPromotionalFilter();
 
     [Test]
     [Property("TestCaseId", "CAT-COM-008")]
