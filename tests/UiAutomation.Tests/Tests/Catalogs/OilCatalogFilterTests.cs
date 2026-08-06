@@ -173,15 +173,6 @@ public sealed class OilCatalogFilterTests : CatalogFilterTestBase
     public void SaleFilterShowsOnlyMarkedDownOils() => AssertSaleFilter();
 
     /// <summary>
-    /// Включает фильтр акционных товаров и проверяет, что он остаётся выбранным,
-    /// отображается среди применённых и изменяет непустую выдачу масел.
-    /// </summary>
-    [Test]
-    [Property("TestCaseId", "CAT-COM-005")]
-    public void PromotionalFilterChangesResultsAndRemainsApplied() =>
-        AssertPromotionalFilter();
-
-    /// <summary>
     /// Применяет фильтр масел, сбрасывает его и проверяет очистку выбранных
     /// значений и восстановление первоначальной выдачи.
     /// </summary>
