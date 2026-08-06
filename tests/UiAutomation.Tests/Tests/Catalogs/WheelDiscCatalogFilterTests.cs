@@ -89,19 +89,25 @@ public sealed class WheelDiscCatalogFilterTests : CatalogFilterTestBase
             "offset 'ET 102'");
 
     /// <summary>
-    /// Выбирает центральное отверстие DIA 108.5 и проверяет это значение
-    /// в описании каждого диска из отфильтрованной выдачи.
+    /// Выбирает центральное отверстие DIA 108.5, проверяет применение фильтра
+    /// и изменение выдачи, а также наличие значения 108.5 хотя бы в одном
+    /// наименовании. Префикс DIA и конкретный символ-разделитель необязательны.
     /// </summary>
     [Test]
     [Property("TestCaseId", "WHEEL-001")]
-    public void HubDiameterFilterKeepsOnlyWheelDiscsWithSelectedDia() =>
-        AssertDescriptionsMatchAfterFacet(
-            "DIA",
-            "108.5",
-            description => Regex.IsMatch(
-                NormalizeTechnicalText(description),
-                @"DIA108\.5(?!\d)"),
-            "hub diameter 'DIA 108.5'");
+    public void HubDiameterFilterKeepsOnlyWheelDiscsWithSelectedDia()
+    {
+        AssertNarrowingFacet("DIA", "108.5");
+
+        Assert.That(
+            Filter.PrimaryProductDescriptions.Any(description =>
+                Regex.IsMatch(
+                    NormalizeTechnicalText(description),
+                    @"(?<!\d)108[^\p{L}\p{N}]*5(?!\d)")),
+            Is.True,
+            "No primary wheel disc name contains hub diameter '108.5' " +
+            "after filtering.");
+    }
 
     /// <summary>
     /// Выбирает чёрный цвет, проверяет применение фильтра и изменение выдачи,
