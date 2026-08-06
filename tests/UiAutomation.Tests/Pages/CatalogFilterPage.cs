@@ -26,6 +26,8 @@ public sealed class CatalogFilterPage
 
     public IReadOnlyList<string> ProductDescriptions => _results.ProductDescriptions;
 
+    public IReadOnlyList<string> ProductDisplayTexts => _results.ProductDisplayTexts;
+
     public IReadOnlyList<string> PrimaryProductDescriptions =>
         _results.PrimaryProductDescriptions;
 

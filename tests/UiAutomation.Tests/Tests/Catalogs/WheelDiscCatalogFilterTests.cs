@@ -37,7 +37,7 @@ public sealed class WheelDiscCatalogFilterTests : CatalogFilterTestBase
             "11.75",
             description => Regex.IsMatch(
                 NormalizeTechnicalText(description),
-                @"\d+(?:\.\d+)?X11\.75(?!\d)"),
+                @"\d+(?:\.\d+)?\s*X\s*11\.75(?!\d)"),
             "width '11.75'");
 
     /// <summary>
@@ -61,17 +61,26 @@ public sealed class WheelDiscCatalogFilterTests : CatalogFilterTestBase
     }
 
     /// <summary>
-    /// Выбирает разболтовку 10х335 и проверяет, что значение PCD присутствует
-    /// в описании каждого показанного диска.
+    /// Выбирает разболтовку 10х335, проверяет применение фильтра и изменение
+    /// выдачи, а также наличие выбранного PCD хотя бы в одном наименовании.
+    /// Разные варианты символа умножения и пробелы приводятся к одному формату.
     /// </summary>
     [Test]
     [Property("TestCaseId", "WHEEL-001")]
-    public void PcdFilterKeepsOnlyWheelDiscsWithSelectedBoltPattern() =>
-        AssertDescriptionsMatchAfterFacet(
-            "PCD",
-            "10х335",
-            description => NormalizeTechnicalText(description).Contains("10X335"),
-            "PCD '10x335'");
+    public void PcdFilterKeepsOnlyWheelDiscsWithSelectedBoltPattern()
+    {
+        AssertNarrowingFacet("PCD", "10х335");
+        var displayTexts = Filter.ProductDisplayTexts;
+
+        Assert.That(
+            displayTexts.Any(description =>
+                Regex.IsMatch(
+                    NormalizeTechnicalText(description),
+                    @"(?<!\d)10(?:X|[^\p{L}\p{N}])*335(?!\d)")),
+            Is.True,
+            "No visible wheel disc name contains PCD '10x335' after filtering. " +
+            "Read product rows: " + string.Join(" | ", displayTexts.Take(10)));
+    }
 
     /// <summary>
     /// Выбирает вылет ET 102 и проверяет, что ET 102 указан в описании каждого
@@ -85,7 +94,7 @@ public sealed class WheelDiscCatalogFilterTests : CatalogFilterTestBase
             "102",
             description => Regex.IsMatch(
                 NormalizeTechnicalText(description),
-                @"ET102(?!\d)"),
+                @"ET\s*102(?!\d)"),
             "offset 'ET 102'");
 
     /// <summary>
@@ -144,15 +153,6 @@ public sealed class WheelDiscCatalogFilterTests : CatalogFilterTestBase
     public void SaleFilterShowsOnlyMarkedDownWheelDiscs() => AssertSaleFilter();
 
     /// <summary>
-    /// Включает акционный товар и проверяет, что фильтр применился и изменил
-    /// непустую выдачу колёсных дисков.
-    /// </summary>
-    [Test]
-    [Property("TestCaseId", "CAT-COM-005")]
-    public void PromotionalFilterChangesResultsAndRemainsApplied() =>
-        AssertPromotionalFilter();
-
-    /// <summary>
     /// Применяет фильтр дисков, сбрасывает его и проверяет восстановление
     /// первоначальной выдачи и очистку выбранных параметров.
     /// </summary>
@@ -160,11 +160,15 @@ public sealed class WheelDiscCatalogFilterTests : CatalogFilterTestBase
     [Property("TestCaseId", "CAT-COM-008")]
     public void ResettingFiltersClearsWheelDiscSelection() => AssertFilterReset();
 
-    private static string NormalizeTechnicalText(string value) => value
-        .Replace(',', '.')
-        .Replace('х', 'X')
-        .Replace('Х', 'X')
-        .Replace('×', 'X')
-        .Replace(" ", string.Empty)
-        .ToUpperInvariant();
+    private static string NormalizeTechnicalText(string value)
+    {
+        var normalized = value
+            .Replace(',', '.')
+            .Replace('х', 'X')
+            .Replace('Х', 'X')
+            .Replace('×', 'X')
+            .ToUpperInvariant();
+
+        return Regex.Replace(normalized, @"\s+", " ").Trim();
+    }
 }

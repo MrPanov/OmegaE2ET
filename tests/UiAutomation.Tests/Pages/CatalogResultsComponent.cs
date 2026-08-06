@@ -29,6 +29,17 @@ internal sealed class CatalogResultsComponent(IWebDriver driver, WebDriverWait w
 
     public IReadOnlyList<string> ProductDescriptions => driver.VisibleTexts(ProductDescriptionBy);
 
+    public IReadOnlyList<string> ProductDisplayTexts => driver.FindElements(ProductCardBy)
+        .Where(element => element.Displayed)
+        .Select(card => card.FindElement(By.XPath(
+            "ancestor::div[" +
+            "contains(concat(' ', normalize-space(@class), ' '), ' searchBlock ')][1]")))
+        .Where(product => product.Displayed)
+        .Select(product => UiText.NormalizeWhitespace(product.Text))
+        .Where(text => text.Length > 0)
+        .Distinct()
+        .ToArray();
+
     public IReadOnlyList<string> PrimaryProductDescriptions =>
         driver.VisibleTexts(PrimaryProductDescriptionBy);
 
