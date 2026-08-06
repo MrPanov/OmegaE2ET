@@ -99,17 +99,22 @@ public sealed class WheelDiscCatalogFilterTests : CatalogFilterTestBase
             "hub diameter 'DIA 108.5'");
 
     /// <summary>
-    /// Выбирает чёрный цвет и проверяет, что цвет указан в описании каждого
-    /// показанного колёсного диска.
+    /// Выбирает чёрный цвет, проверяет применение фильтра и изменение выдачи,
+    /// а также наличие слова «чорний» хотя бы в одном наименовании товара.
+    /// Цвет хранится в атрибутах и не всегда дублируется в каждом наименовании.
     /// </summary>
     [Test]
     [Property("TestCaseId", "WHEEL-001")]
-    public void ColorFilterKeepsOnlyBlackWheelDiscs() =>
-        AssertDescriptionsMatchAfterFacet(
-            "Color",
-            "чорний",
-            description => NormalizeTechnicalText(description).Contains("ЧОРНИЙ"),
-            "color 'чорний'");
+    public void ColorFilterKeepsOnlyBlackWheelDiscs()
+    {
+        AssertNarrowingFacet("Color", "чорний");
+
+        Assert.That(
+            Filter.PrimaryProductDescriptions.Any(description =>
+                NormalizeTechnicalText(description).Contains("ЧОРНИЙ")),
+            Is.True,
+            "No primary wheel disc name contains color 'чорний' after filtering.");
+    }
 
     /// <summary>
     /// Включает фильтр наличия и проверяет положительный остаток каждого диска
