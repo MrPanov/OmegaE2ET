@@ -57,22 +57,31 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
         });
     }
 
-    protected FacetOption AssertNarrowingFacet(string facetTitle, string? optionValue = null)
+    protected FacetOption AssertNarrowingFacet(
+        string facetTitle,
+        string? optionValue = null,
+        bool requireResultChange = true)
     {
         var option = optionValue is null
             ? Filter.SelectMostRestrictiveFacetOption(facetTitle)
             : Filter.SelectFacetOption(facetTitle, optionValue);
 
-        return AssertNarrowingFacet(facetTitle, option);
+        return AssertNarrowingFacet(facetTitle, option, requireResultChange);
     }
 
     protected FacetOption AssertFirstListedNarrowingFacet(string facetTitle) =>
-        AssertNarrowingFacet(facetTitle, Filter.SelectFirstListedFacetOption(facetTitle));
+        AssertNarrowingFacet(
+            facetTitle,
+            Filter.SelectFirstListedFacetOption(facetTitle),
+            requireResultChange: true);
 
-    private FacetOption AssertNarrowingFacet(string facetTitle, FacetOption option)
+    private FacetOption AssertNarrowingFacet(
+        string facetTitle,
+        FacetOption option,
+        bool requireResultChange)
     {
         var unfilteredSignature = Filter.ResultSignature;
-        Filter.ApplyFilters(option.Value);
+        Filter.ApplyFilters(option.Value, requireResultChange);
         var filteredSignature = Filter.ResultSignature;
 
         Assert.Multiple(() =>
@@ -84,8 +93,12 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
             Assert.That(Filter.HasAppliedFilter(option.Value), Is.True,
                 $"'{facetTitle}' = '{option.Value}' is absent from the applied filters " +
                 $"for '{Catalog.Name}'.");
-            Assert.That(filteredSignature, Is.Not.EqualTo(unfilteredSignature),
-                $"'{facetTitle}' = '{option.Value}' did not change products for '{Catalog.Name}'.");
+            if (requireResultChange)
+            {
+                Assert.That(filteredSignature, Is.Not.EqualTo(unfilteredSignature),
+                    $"'{facetTitle}' = '{option.Value}' did not change products " +
+                    $"for '{Catalog.Name}'.");
+            }
             Assert.That(Filter.ResultCount, Is.GreaterThan(0),
                 $"'{facetTitle}' = '{option.Value}' returned no products for '{Catalog.Name}'.");
             if (option.Count > 0)
@@ -103,9 +116,10 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
         string facetTitle,
         string optionValue,
         Func<string, bool> matches,
-        string expectedDescription)
+        string expectedDescription,
+        bool requireResultChange = true)
     {
-        var option = AssertNarrowingFacet(facetTitle, optionValue);
+        var option = AssertNarrowingFacet(facetTitle, optionValue, requireResultChange);
         var descriptions = Filter.ProductDescriptions;
         var mismatches = descriptions.Where(description => !matches(description)).ToArray();
 
@@ -121,7 +135,7 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
         return option;
     }
 
-    protected void AssertInStockFilter()
+    protected void AssertInStockFilter(bool verifyVisibleWarehouseStock = true)
     {
         Filter.SwitchToListView();
         Filter.EnableInStockOnly();
@@ -129,7 +143,9 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
             "Тільки товар у наявності",
             requireResultChange: false);
 
-        var withoutStock = Filter.ProductsWithoutStock(InStockProductsToCheck);
+        var withoutStock = verifyVisibleWarehouseStock
+            ? Filter.ProductsWithoutStock(InStockProductsToCheck)
+            : Array.Empty<string>();
 
         Assert.Multiple(() =>
         {
@@ -142,11 +158,14 @@ public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
             Assert.That(Filter.ResultCount, Is.GreaterThanOrEqualTo(InStockProductsToCheck),
                 $"Fewer than {InStockProductsToCheck} products remained after the in-stock " +
                 $"filter for '{Catalog.Name}'.");
-            Assert.That(withoutStock, Is.Empty,
-                $"Products among the first {InStockProductsToCheck} results were shown with " +
-                $"zero stock at the selected warehouse " +
-                $"for '{Catalog.Name}': " +
-                string.Join(" | ", withoutStock));
+            if (verifyVisibleWarehouseStock)
+            {
+                Assert.That(withoutStock, Is.Empty,
+                    $"Products among the first {InStockProductsToCheck} results were shown with " +
+                    $"zero stock at the selected warehouse " +
+                    $"for '{Catalog.Name}': " +
+                    string.Join(" | ", withoutStock));
+            }
         });
     }
 

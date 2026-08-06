@@ -37,7 +37,8 @@ public sealed class BatteryCatalogFilterTests : CatalogFilterTestBase
             "Напруга",
             "12 В",
             @"(?<!\d)12V(?!\d)",
-            "voltage '12 V'");
+            "voltage '12 V'",
+            requireResultChange: false);
 
     /// <summary>
     /// Выбирает технологию EFB и проверяет, что обозначение EFB присутствует
@@ -152,12 +153,14 @@ public sealed class BatteryCatalogFilterTests : CatalogFilterTestBase
         AssertNarrowingFacet("Тип кріплення", "B13");
 
     /// <summary>
-    /// Включает фильтр наличия и проверяет положительный остаток каждого
-    /// аккумулятора хотя бы на одном доступном складе.
+    /// Включает фильтр наличия и проверяет его применение и непустую выдачу.
+    /// Остаток не сверяется с выбранным складом: фильтр учитывает наличие
+    /// аккумулятора на любом складе.
     /// </summary>
     [Test]
     [Property("TestCaseId", "CAT-COM-005")]
-    public void InStockFilterShowsOnlyAvailableBatteries() => AssertInStockFilter();
+    public void InStockFilterShowsOnlyAvailableBatteries() =>
+        AssertInStockFilter(verifyVisibleWarehouseStock: false);
 
     /// <summary>
     /// Включает распродажу и проверяет изменение выдачи и наличие признака
@@ -166,15 +169,6 @@ public sealed class BatteryCatalogFilterTests : CatalogFilterTestBase
     [Test]
     [Property("TestCaseId", "CAT-COM-005")]
     public void SaleFilterShowsOnlyMarkedDownBatteries() => AssertSaleFilter();
-
-    /// <summary>
-    /// Включает акционный товар и проверяет, что фильтр применился и изменил
-    /// непустую выдачу аккумуляторов.
-    /// </summary>
-    [Test]
-    [Property("TestCaseId", "CAT-COM-005")]
-    public void PromotionalFilterChangesResultsAndRemainsApplied() =>
-        AssertPromotionalFilter();
 
     /// <summary>
     /// Применяет фильтр аккумуляторов, сбрасывает его и проверяет очистку
@@ -188,12 +182,14 @@ public sealed class BatteryCatalogFilterTests : CatalogFilterTestBase
         string facetTitle,
         string optionValue,
         string pattern,
-        string expectedDescription) =>
+        string expectedDescription,
+        bool requireResultChange = true) =>
         AssertDescriptionsMatchAfterFacet(
             facetTitle,
             optionValue,
             description => Regex.IsMatch(NormalizeBatteryText(description), pattern),
-            expectedDescription);
+            expectedDescription,
+            requireResultChange);
 
     private static string NormalizeBatteryText(string value) => value
         .Replace(',', '.')

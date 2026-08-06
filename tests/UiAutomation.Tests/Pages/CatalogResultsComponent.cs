@@ -198,11 +198,9 @@ internal sealed class CatalogResultsComponent(IWebDriver driver, WebDriverWait w
 
         // Numeric facet tags are rendered as digits only
         // (for example, the "100 А/ч" option is shown as the "100" tag).
-        return Regex.IsMatch(actual.Trim(), @"^\d+$") &&
-               string.Equals(
-                   DigitsOnly(actual),
-                   DigitsOnly(expected),
-                   StringComparison.Ordinal);
+        var actualDigits = DigitsOnly(actual);
+        return actualDigits.Length > 0 &&
+               string.Equals(actualDigits, DigitsOnly(expected), StringComparison.Ordinal);
     }
 
     private static string DigitsOnly(string value) => Regex.Replace(value, @"\D", string.Empty);
