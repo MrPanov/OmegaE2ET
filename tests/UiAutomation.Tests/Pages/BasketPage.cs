@@ -24,6 +24,18 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
 
     private readonly WebDriverWait _wait = new(driver, waitTimeout);
 
+    public bool IsLoaded => driver.IsVisible(AddPositionBy);
+
+    public bool IsInvoiceJournalVisible => driver.FindElements(By.XPath(
+            "//a[contains(normalize-space(.), 'Журнал рахунків')]") )
+        .Any(element => element.Displayed);
+
+    public IReadOnlyList<string> ProductCards => driver.FindElements(By.CssSelector(".item-basket .basketCard a"))
+        .Where(element => element.Displayed)
+        .Select(element => UiText.NormalizeWhitespace(element.Text))
+        .Where(text => text.Length > 0)
+        .ToArray();
+
     public void Open(string baseUrl)
     {
         driver.Navigate().GoToUrl(new Uri(new Uri(baseUrl), "#/app/basket"));
@@ -41,18 +53,125 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
         _wait.Until(_ => ProductRow(cardNumber) is not null);
     }
 
-    public WarehouseChoice PositiveStockWarehouse(string cardNumber)
+    public bool HasProduct(string cardNumber) => ProductRow(cardNumber) is not null;
+
+    public BasketProductDetails ProductDetails(string cardNumber)
     {
-        var row = ProductRow(cardNumber) ??
-                  throw new InvalidOperationException($"Product '{cardNumber}' is absent from the basket.");
-        var tableRows = row.FindElements(By.CssSelector("table tr"));
-        if (tableRows.Count < 2)
+        var row = RequiredProductRow(cardNumber);
+        var links = row.FindElements(By.CssSelector("a"))
+            .Where(element => element.Displayed)
+            .Select(element => UiText.NormalizeWhitespace(element.Text))
+            .Where(text => text.Length > 0)
+            .ToArray();
+        var quantity = row.FindElement(By.CssSelector("input[type='number']"));
+        var priceTexts = row.FindElements(By.CssSelector(".price, [class*='price'], ul"))
+            .Where(element => element.Displayed)
+            .Select(element => UiText.NormalizeWhitespace(element.Text));
+
+        return new BasketProductDetails(
+            Card: cardNumber,
+            Code: links.First(text => !string.Equals(text, cardNumber, StringComparison.Ordinal) &&
+                                      !string.Equals(text, "Аналоги", StringComparison.OrdinalIgnoreCase)),
+            Text: UiText.NormalizeWhitespace(row.Text),
+            Price: priceTexts.Select(ParseAmount).First(amount => amount > 0),
+            Quantity: int.Parse(quantity.GetAttribute("value") ?? "0", CultureInfo.InvariantCulture));
+    }
+
+    public WarehouseStockTable WarehouseStocks(string cardNumber)
+    {
+        var (headerCells, valueCells) = StockCells(cardNumber);
+        var headers = headerCells.Select(element => UiText.NormalizeWhitespace(element.Text)).ToArray();
+        var values = valueCells.Select(element => UiText.NormalizeWhitespace(element.Text)).ToArray();
+        var warehouseCount = Math.Min(headers.Length, values.Length) - 1;
+        return new WarehouseStockTable(headers[..warehouseCount], values[..warehouseCount]);
+    }
+
+    public int ProductQuantity(string cardNumber) => int.Parse(
+        RequiredProductRow(cardNumber).FindElement(By.CssSelector("input[type='number']"))
+            .GetAttribute("value") ?? "0",
+        CultureInfo.InvariantCulture);
+
+    public void IncreaseQuantity(string cardNumber) =>
+        ChangeQuantity(cardNumber, "Increment", ProductQuantity(cardNumber) + 1);
+
+    public void DecreaseQuantity(string cardNumber) =>
+        ChangeQuantity(cardNumber, "Decrement", ProductQuantity(cardNumber) - 1);
+
+    public void SetQuantity(string cardNumber, string value)
+    {
+        var input = RequiredProductRow(cardNumber).FindElement(By.CssSelector("input[type='number']"));
+        input.SendKeys(Keys.Control + "a");
+        input.SendKeys(value + Keys.Tab);
+    }
+
+    public decimal SelectedTotal => ParseAmount(_wait.Until(d => d.FindElements(By.XPath(
+            "//*[contains(normalize-space(.), 'Загальна сума обраних в кошику')]/following::strong[1]"))
+        .First(element => element.Displayed)).Text);
+
+    public IReadOnlyList<bool> SelectionStates => driver.FindElements(BasketRowsBy)
+        .Where(row => row.Displayed)
+        .Select(row => row.FindElements(By.CssSelector("input[type='checkbox']")).FirstOrDefault()?.Selected == true)
+        .ToArray();
+
+    public void RestoreSelectionStates(IReadOnlyList<bool> states)
+    {
+        var rows = driver.FindElements(BasketRowsBy).Where(row => row.Displayed).ToArray();
+        if (rows.Length != states.Count)
         {
-            throw new InvalidOperationException($"Stock table is absent for product '{cardNumber}'.");
+            throw new InvalidOperationException(
+                $"Cannot restore basket selection: expected {states.Count} rows, found {rows.Length}.");
         }
 
-        var headers = tableRows[0].FindElements(By.CssSelector("th,td"));
-        var values = tableRows[1].FindElements(By.CssSelector("th,td"));
+        for (var index = 0; index < rows.Length; index++)
+        {
+            var checkbox = rows[index].FindElement(By.CssSelector("input[type='checkbox']"));
+            if (checkbox.Selected == states[index]) continue;
+            driver.ClickRobustly(rows[index].FindElements(By.CssSelector("label")).First());
+            var expected = states[index];
+            _wait.Until(_ => checkbox.IsStale() || checkbox.Selected == expected);
+        }
+    }
+
+    public void SetSelectAll(bool selected)
+    {
+        var label = _wait.Until(d => d.FindElements(By.XPath(
+                "//label[contains(normalize-space(.), 'Вибрати всі')]") )
+            .First(element => element.Displayed));
+        var checkbox = label.FindElement(By.CssSelector("input[type='checkbox']"));
+        if (checkbox.Selected != selected) driver.ClickRobustly(label);
+        _wait.Until(_ => SelectionStates.All(state => state == selected));
+    }
+
+    public void RemoveProduct(string cardNumber)
+    {
+        var row = ProductRow(cardNumber);
+        if (row is null) return;
+
+        var action = row.FindElements(By.CssSelector("[ng-click]"))
+            .FirstOrDefault(element =>
+            {
+                var handler = element.GetAttribute("ng-click") ?? string.Empty;
+                return handler.Contains("remove", StringComparison.OrdinalIgnoreCase) ||
+                       handler.Contains("delete", StringComparison.OrdinalIgnoreCase);
+            });
+        action ??= row.FindElements(By.CssSelector(".fa-close, .fa-remove")).FirstOrDefault();
+        if (action is null) throw new InvalidOperationException($"Remove action is absent for '{cardNumber}'.");
+
+        driver.ClickRobustly(action);
+        try
+        {
+            driver.SwitchTo().Alert().Accept();
+        }
+        catch (NoAlertPresentException)
+        {
+        }
+
+        _wait.Until(_ => ProductRow(cardNumber) is null);
+    }
+
+    public WarehouseChoice PositiveStockWarehouse(string cardNumber)
+    {
+        var (headers, values) = StockCells(cardNumber);
         var warehouseCount = Math.Min(headers.Count, values.Count) - 1;
 
         for (var index = 0; index < warehouseCount; index++)
@@ -134,6 +253,50 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
         driver.FindElements(BasketRowsBy)
             .FirstOrDefault(row => row.Displayed && ContainsExactText(row, cardNumber));
 
+    private IWebElement RequiredProductRow(string cardNumber) => ProductRow(cardNumber) ??
+        throw new InvalidOperationException($"Product '{cardNumber}' is absent from the basket.");
+
+    private (IReadOnlyList<IWebElement> Headers, IReadOnlyList<IWebElement> Values) StockCells(
+        string cardNumber)
+    {
+        var row = RequiredProductRow(cardNumber);
+        var itemRows = row.FindElements(By.CssSelector("table tr"));
+        if (itemRows.Count == 0)
+        {
+            throw new InvalidOperationException($"Stock table is absent for product '{cardNumber}'.");
+        }
+
+        if (itemRows.Count >= 2)
+        {
+            return (
+                itemRows[0].FindElements(By.CssSelector("th,td")),
+                itemRows[1].FindElements(By.CssSelector("th,td")));
+        }
+
+        var headerRow = driver.FindElements(By.CssSelector("table tr"))
+            .FirstOrDefault(candidate => candidate.Displayed &&
+                candidate.FindElements(By.CssSelector("th,td"))
+                    .Any(cell => UiText.NormalizeWhitespace(cell.Text) == "Всі скл."));
+        if (headerRow is null)
+        {
+            throw new InvalidOperationException("Warehouse header row is absent.");
+        }
+
+        return (
+            headerRow.FindElements(By.CssSelector("th,td")),
+            itemRows[0].FindElements(By.CssSelector("th,td")));
+    }
+
+    private void ChangeQuantity(string cardNumber, string actionName, int expected)
+    {
+        var row = RequiredProductRow(cardNumber);
+        var action = row.FindElements(By.CssSelector("[ng-click]"))
+            .First(element => (element.GetAttribute("ng-click") ?? string.Empty)
+                .Contains(actionName, StringComparison.OrdinalIgnoreCase));
+        driver.ClickRobustly(action);
+        _wait.Until(_ => ProductQuantity(cardNumber) == expected);
+    }
+
     private IReadOnlyList<string> SelectedProductCards() =>
         driver.FindElements(BasketRowsBy)
             .Where(row => row.Displayed && row.FindElements(By.CssSelector("input[type='checkbox']"))
@@ -175,6 +338,28 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
         return decimal.TryParse(numeric, NumberStyles.Number, CultureInfo.InvariantCulture, out var stock) &&
                stock > 0;
     }
+
+    private static decimal ParseAmount(string value)
+    {
+        var normalized = new string(value.Where(character =>
+                char.IsDigit(character) || character is '.' or ',' or '-').ToArray())
+            .Replace(" ", string.Empty)
+            .Replace(',', '.');
+        return decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount)
+            ? amount
+            : 0;
+    }
 }
 
 public sealed record WarehouseChoice(int Index, string ColumnName, string Stock);
+
+public sealed record WarehouseStockTable(
+    IReadOnlyList<string> Headers,
+    IReadOnlyList<string> Values);
+
+public sealed record BasketProductDetails(
+    string Card,
+    string Code,
+    string Text,
+    decimal Price,
+    int Quantity);
