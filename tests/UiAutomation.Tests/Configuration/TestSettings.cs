@@ -13,7 +13,7 @@ public sealed record TestSettings(
     string LoginPassword,
     SearchTestData SearchData)
 {
-    private static readonly SearchTestData DefaultTestSearchData = new(
+    private static readonly SearchTestData DefaultSearchData = new(
         ProductCode: "OC90",
         ProductCard: "4610495",
         ProductDescription:
@@ -44,21 +44,28 @@ public sealed record TestSettings(
                 environmentName,
                 StringComparison.OrdinalIgnoreCase))
             .Value;
-        var isTestEnvironment = string.Equals(
+        var isTestEnvironment = string.Equals(environmentName, "Test", StringComparison.OrdinalIgnoreCase);
+        var isProductionEnvironment = string.Equals(
             environmentName,
-            "Test",
+            "Production",
             StringComparison.OrdinalIgnoreCase);
+        if (!isTestEnvironment && !isProductionEnvironment)
+        {
+            throw new InvalidOperationException(
+                $"Unknown environment '{environmentName}'. Supported values: Test, Production.");
+        }
 
         var baseUrl = Get(
             "BASE_URL",
-            localEnvironment?.BaseUrl ?? (isTestEnvironment ? "https://test.omega.page/" : string.Empty));
+            localEnvironment?.BaseUrl ??
+            (isTestEnvironment ? "https://test.omega.page/" : "https://my.omega.page/"));
         var loginEmail = Get(
             "OMEGA_EMAIL",
-            localEnvironment?.LoginEmail ?? (isTestEnvironment ? "web@omega-auto.biz" : string.Empty));
+            localEnvironment?.LoginEmail ?? "web@omega-auto.biz");
         var loginPassword = Get(
             "OMEGA_PASSWORD",
             localEnvironment?.LoginPassword ?? string.Empty);
-        var searchData = CreateSearchData(localEnvironment?.Search, isTestEnvironment);
+        var searchData = CreateSearchData(localEnvironment?.Search);
         var searchMinimumIntervalSeconds = GetInt(
             "SEARCH_MIN_INTERVAL_SECONDS",
             localEnvironment?.SearchMinimumIntervalSeconds ?? (isTestEnvironment ? 5 : 10),
@@ -84,11 +91,9 @@ public sealed record TestSettings(
             SearchData: searchData);
     }
 
-    private static SearchTestData CreateSearchData(
-        LocalSearchTestData? local,
-        bool isTestEnvironment)
+    private static SearchTestData CreateSearchData(LocalSearchTestData? local)
     {
-        var fallback = isTestEnvironment ? DefaultTestSearchData : SearchTestData.Empty;
+        var fallback = DefaultSearchData;
 
         return new SearchTestData(
             ProductCode: Get("SEARCH_PRODUCT_CODE", local?.ProductCode ?? fallback.ProductCode),

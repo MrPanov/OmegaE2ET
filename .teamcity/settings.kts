@@ -12,7 +12,13 @@ object UiTests : BuildType({
     name = "Selenium UI Tests"
 
     params {
-        param("env.BASE_URL", "https://test.omega.page/")
+        select(
+            "env.OMEGA_ENVIRONMENT",
+            "Production",
+            label = "Target environment",
+            description = "Production: my.omega.page; Test: test.omega.page",
+            options = listOf("Production", "Test")
+        )
         param("env.OMEGA_EMAIL", "web@omega-auto.biz")
         select("env.BROWSER", "chrome", options = listOf("chrome", "edge", "firefox"))
         checkbox("env.HEADLESS", "true", checked = "true", unchecked = "false")

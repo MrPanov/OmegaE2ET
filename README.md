@@ -20,13 +20,14 @@ Selenium Manager автоматически подбирает драйвер у
 
 Поле `activeEnvironment` выбирает профиль:
 
-- `Test` — тестовый сервер и тестовый пользователь;
-- `Production` — production-сервер и production-клиент.
+- `Test` — `https://test.omega.page/`, используется по умолчанию локально;
+- `Production` — `https://my.omega.page/`, используется в TeamCity.
 
-Перед первым production-запуском заполните в профиле `Production` поля `baseUrl`,
-`loginEmail`, `loginPassword` и весь блок `search` с эталонным товаром production-клиента,
-затем измените `activeEnvironment` на `Production`. Чтобы вернуться на тестовый сервер,
-укажите `Test`. Переменные `BASE_URL`, `OMEGA_EMAIL`, `OMEGA_PASSWORD`,
+Обе среды используют клиента `web@omega-auto.biz` и одинаковый набор эталонных
+поисковых данных. Перед локальным production-запуском заполните только
+`loginPassword` в профиле `Production`, затем измените `activeEnvironment` на
+`Production`. Чтобы вернуться на тестовый сервер, укажите `Test`. Переменные
+`BASE_URL`, `OMEGA_EMAIL`, `OMEGA_PASSWORD`,
 `OMEGA_ENVIRONMENT`, `SEARCH_MIN_INTERVAL_SECONDS` и переменные `SEARCH_*` имеют
 приоритет над локальным файлом.
 
@@ -48,6 +49,7 @@ dotnet test --filter "TestCategory=P1"
 
 Настройки по умолчанию:
 
+- `OMEGA_ENVIRONMENT=Test`
 - `BASE_URL=https://test.omega.page/`
 - `OMEGA_EMAIL=web@omega-auto.biz`
 - `BROWSER=chrome`
@@ -106,6 +108,19 @@ dotnet test --filter "TestCategory=P1"
 
 Если заполнен `testsettings.local.json`, Visual Studio можно открыть обычным способом:
 пароль, активная среда и эталонные поисковые данные будут прочитаны из локального файла.
+
+Для переключения среды непосредственно в Visual Studio выберите:
+
+1. `Test → Configure Run Settings → Select Solution Wide runsettings File`.
+2. `runsettings/Test.runsettings` для тестового сайта или
+   `runsettings/Production.runsettings` для боевого сайта.
+3. Запустите тесты через Test Explorer.
+
+Выбранный `.runsettings` задаёт только `OMEGA_ENVIRONMENT` и имеет приоритет над
+`activeEnvironment` из локального JSON. URL определяется автоматически. Пароль в
+`.runsettings` намеренно не хранится и по-прежнему читается из
+`testsettings.local.json` либо `OMEGA_PASSWORD`.
+
 Если локального файла нет, закройте уже открытую Visual Studio и запустите скрипт:
 
 ```powershell
@@ -139,5 +154,24 @@ TeamCity как Versioned Settings и убедитесь, что на агент
 и браузер.
 
 Создайте в TeamCity параметр `env.OMEGA_PASSWORD` типа **Password**. Остальные
-параметры можно переопределить в конфигурации или при ручном запуске.
+параметры можно переопределить в конфигурации или при ручном запуске. Versioned
+Settings добавляют выпадающий параметр `env.OMEGA_ENVIRONMENT`: при ручном
+запуске можно выбрать `Production` или `Test`. По умолчанию выбран `Production`.
+`BASE_URL` в TeamCity намеренно не задаётся: проект автоматически использует
+`https://my.omega.page/` для `Production` и `https://test.omega.page/` для `Test`.
+Логин задаётся как `env.OMEGA_EMAIL=web@omega-auto.biz`.
+
+Для явного локального выбора среды без редактирования JSON:
+
+```powershell
+# Test (по умолчанию)
+$env:OMEGA_ENVIRONMENT = "Test"
+$env:OMEGA_PASSWORD = "<пароль>"
+dotnet test
+
+# Production
+$env:OMEGA_ENVIRONMENT = "Production"
+$env:OMEGA_PASSWORD = "<пароль>"
+dotnet test
+```
 
