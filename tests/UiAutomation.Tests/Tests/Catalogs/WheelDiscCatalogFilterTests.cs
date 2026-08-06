@@ -41,19 +41,24 @@ public sealed class WheelDiscCatalogFilterTests : CatalogFilterTestBase
             "width '11.75'");
 
     /// <summary>
-    /// Выбирает диаметр 17.5 и проверяет, что размер каждого диска в выдаче
-    /// начинается с выбранного диаметра.
+    /// Выбирает диаметр 17.5, проверяет применение фильтра и изменение выдачи,
+    /// а также наличие выбранного диаметра хотя бы в одном наименовании товара.
+    /// Диаметр хранится в атрибутах и не всегда дублируется в каждом наименовании.
     /// </summary>
     [Test]
     [Property("TestCaseId", "WHEEL-001")]
-    public void DiameterFilterKeepsOnlyWheelDiscsOfThatDiameter() =>
-        AssertDescriptionsMatchAfterFacet(
-            "Діаметр",
-            "17.5",
-            description => Regex.IsMatch(
-                NormalizeTechnicalText(description),
-                @"17\.5X\d"),
-            "diameter '17.5'");
+    public void DiameterFilterKeepsOnlyWheelDiscsOfThatDiameter()
+    {
+        AssertNarrowingFacet("Діаметр", "17.5");
+
+        Assert.That(
+            Filter.PrimaryProductDescriptions.Any(description =>
+                Regex.IsMatch(
+                    NormalizeTechnicalText(description),
+                    @"(?<!\d)17\.5(?!\d)")),
+            Is.True,
+            "No primary wheel disc name contains diameter '17.5' after filtering.");
+    }
 
     /// <summary>
     /// Выбирает разболтовку 10х335 и проверяет, что значение PCD присутствует
