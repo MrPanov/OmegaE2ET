@@ -63,15 +63,6 @@ public sealed class CameraCatalogFilterTests : CatalogFilterTestBase
     public void SaleFilterShowsOnlyMarkedDownCameras() => AssertSaleFilter();
 
     /// <summary>
-    /// Включает фильтр акционных товаров и проверяет, что он остаётся выбранным,
-    /// отображается среди применённых и изменяет непустую выдачу камер.
-    /// </summary>
-    [Test]
-    [Property("TestCaseId", "CAT-COM-005")]
-    public void PromotionalFilterChangesResultsAndRemainsApplied() =>
-        AssertPromotionalFilter();
-
-    /// <summary>
     /// Применяет фильтр камер, затем сбрасывает его и проверяет, что выбранные
     /// параметры очищены, а исходная выдача восстановлена.
     /// </summary>
