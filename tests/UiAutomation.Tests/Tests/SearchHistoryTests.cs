@@ -9,6 +9,7 @@ namespace UiAutomation.Tests.Tests;
 [FixtureLifeCycle(LifeCycle.SingleInstance)]
 [Category("Search")]
 [Category("SearchControls")]
+[Category(TestCategories.ProductionTestClient)]
 [Category(TestCategories.MutatesUserState)]
 public sealed class SearchHistoryTests : AuthenticatedUiTestFixture
 {
@@ -18,6 +19,10 @@ public sealed class SearchHistoryTests : AuthenticatedUiTestFixture
 
     protected override void OnAuthenticated()
     {
+        Assert.That(
+            Settings.SearchData.IsConfigured,
+            Is.True,
+            $"Search reference data are not configured for environment '{Settings.EnvironmentName}'.");
         _search = new SearchResultsPage(
             Driver,
             Timeout,

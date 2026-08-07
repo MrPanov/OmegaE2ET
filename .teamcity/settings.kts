@@ -12,6 +12,7 @@ project {
     buildType(UiP0ReleaseTests)
     buildType(UiNightlyTests)
     buildType(UiProductionReadOnlyTests)
+    buildType(UiProductionTestClientTests)
 }
 
 object UiSmokeTests : BuildType({
@@ -49,26 +50,38 @@ object UiNightlyTests : BuildType({
 
 object UiProductionReadOnlyTests : BuildType({
     name = "UI Read Only - Production"
-    description = "Manual-only production run. Mutating tests are blocked in code and by filter."
+    description = "Manual-only production run without test-client state changes."
     configureUiTests(
-        testFilter = "TestCategory=ProductionSafe&TestCategory!=MutatesUserState",
+        testFilter = "TestCategory=ProductionSafe&TestCategory!=MutatesUserState&TestCategory!=ProductionBlocked",
         environmentName = "Production",
         allowProduction = true)
+})
+
+object UiProductionTestClientTests : BuildType({
+    name = "UI Test Client - Production"
+    description = "Manual full run for the isolated test client in the production database."
+    configureUiTests(
+        testFilter = "(TestCategory=ProductionSafe|TestCategory=ProductionTestClient)&TestCategory!=ProductionBlocked",
+        environmentName = "Production",
+        allowProduction = true,
+        allowProductionMutations = true)
 })
 
 fun BuildType.configureUiTests(
     testFilter: String,
     environmentName: String = "Test",
-    allowProduction: Boolean = false)
+    allowProduction: Boolean = false,
+    allowProductionMutations: Boolean = false)
 {
     params {
         param("env.OMEGA_ENVIRONMENT", environmentName)
         param("env.ALLOW_PRODUCTION_TESTS", allowProduction.toString())
+        param("env.ALLOW_PRODUCTION_MUTATIONS", allowProductionMutations.toString())
         param("env.REQUIRE_AUTHENTICATION", "true")
         param(
             "env.OMEGA_EMAIL",
             if (environmentName == "Production")
-                "<production technical login>"
+                "<production test-client login>"
             else
                 "web@omega-auto.biz")
         select("env.BROWSER", "chrome", options = listOf("chrome", "edge", "firefox"))

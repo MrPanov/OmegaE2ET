@@ -10,6 +10,7 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     private static readonly TimeSpan BasketSettleTime = TimeSpan.FromMilliseconds(300);
     private static readonly By BlockingOverlayBy = By.CssSelector("div.block-ui-overlay");
     private static readonly By AddPositionBy = By.Id("inputBasketAddCardNumber");
+    private static readonly By AddPositionConfirmBy = By.Id("buttonBasketGo");
     private static readonly By BasketRowsBy = By.CssSelector(".item-basket");
     private static readonly By RowCheckboxLabelBy = By.CssSelector("label:has(input[type='checkbox'])");
     private static readonly By ReserveButtonBy = By.Id("buttonBasketReservationInvoice");
@@ -50,9 +51,11 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
         var input = _wait.Until(d => d.FindElements(AddPositionBy)
             .FirstOrDefault(element => element.Displayed && element.Enabled));
         input.Clear();
-        input.SendKeys(cardNumber + Keys.Enter);
+        input.SendKeys(cardNumber);
+        ClickWhenReady(AddPositionConfirmBy);
 
         _wait.Until(_ => ProductRow(cardNumber) is not null);
+        WaitUntilStable();
     }
 
     public bool HasProduct(string cardNumber) => ProductRow(cardNumber) is not null;

@@ -104,12 +104,22 @@ public sealed class TestSettingsLoaderTests
     }
 
     [Test]
-    public void ProductionRequiresExplicitCredentialsAndSearchData()
+    public void ProductionRequiresExplicitCredentials()
     {
         var exception = Assert.Throws<InvalidOperationException>(() =>
             Load(ProductionVariables(), localSettings: null));
 
-        Assert.That(exception!.Message, Does.Contain("Search reference data are not configured"));
+        Assert.That(exception!.Message, Does.Contain("dedicated production login"));
+    }
+
+    [Test]
+    public void ProductionCanLoadWithoutSearchDataForNonSearchScenarios()
+    {
+        var settings = Load(
+            ProductionVariables(),
+            ProductionLocalSettings(includeSearchData: false));
+
+        Assert.That(settings.SearchData.IsConfigured, Is.False);
     }
 
     [Test]
@@ -121,10 +131,31 @@ public sealed class TestSettingsLoaderTests
         {
             Assert.That(settings.IsProduction, Is.True);
             Assert.That(settings.AllowProductionTests, Is.True);
+            Assert.That(settings.AllowProductionMutations, Is.False);
             Assert.That(settings.BaseUrl, Is.EqualTo("https://my.omega.page/"));
             Assert.That(settings.LoginEmail, Is.EqualTo("automation-production@example.test"));
             Assert.That(settings.SearchData.IsConfigured, Is.True);
         });
+    }
+
+    [Test]
+    public void ProductionMutationsRequireTheirOwnExplicitConfirmation()
+    {
+        var settings = Load(
+            ProductionVariables(allowMutations: true),
+            ProductionLocalSettings());
+
+        Assert.That(settings.AllowProductionMutations, Is.True);
+    }
+
+    [Test]
+    public void EmptyProductionProfileBaseUrlUsesKnownProductionUrl()
+    {
+        var settings = Load(
+            ProductionVariables(),
+            ProductionLocalSettings(baseUrl: string.Empty));
+
+        Assert.That(settings.BaseUrl, Is.EqualTo("https://my.omega.page/"));
     }
 
     [Test]
@@ -145,11 +176,14 @@ public sealed class TestSettingsLoaderTests
             name => variables.TryGetValue(name, out var value) ? value : null,
             localSettings);
 
-    private static Dictionary<string, string?> ProductionVariables(bool allowProduction = true) =>
+    private static Dictionary<string, string?> ProductionVariables(
+        bool allowProduction = true,
+        bool allowMutations = false) =>
         new()
         {
             ["OMEGA_ENVIRONMENT"] = "Production",
-            ["ALLOW_PRODUCTION_TESTS"] = allowProduction.ToString()
+            ["ALLOW_PRODUCTION_TESTS"] = allowProduction.ToString(),
+            ["ALLOW_PRODUCTION_MUTATIONS"] = allowMutations.ToString()
         };
 
     private static LocalTestSettings TestLocalSettings(string baseUrl) => new(
@@ -164,16 +198,18 @@ public sealed class TestSettingsLoaderTests
                 Search: null)
         });
 
-    private static LocalTestSettings ProductionLocalSettings() => new(
+    private static LocalTestSettings ProductionLocalSettings(
+        string? baseUrl = "https://my.omega.page/",
+        bool includeSearchData = true) => new(
         "Production",
         new Dictionary<string, LocalEnvironmentSettings>
         {
             ["Production"] = new(
-                BaseUrl: "https://my.omega.page/",
+                BaseUrl: baseUrl,
                 SearchMinimumIntervalSeconds: 10,
                 LoginEmail: "automation-production@example.test",
                 LoginPassword: "production-test-secret",
-                Search: ValidProductionSearchData())
+                Search: includeSearchData ? ValidProductionSearchData() : null)
         });
 
     private static LocalSearchTestData ValidProductionSearchData() => new(

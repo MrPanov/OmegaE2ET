@@ -11,6 +11,7 @@ public sealed record TestSettings(
     string LoginPassword,
     SearchTestData SearchData,
     bool AllowProductionTests,
+    bool AllowProductionMutations,
     bool RequireAuthentication)
 {
     public bool IsProduction =>

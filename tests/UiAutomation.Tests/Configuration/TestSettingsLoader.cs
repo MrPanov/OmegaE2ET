@@ -72,6 +72,10 @@ internal static class TestSettingsLoader
             "ALLOW_PRODUCTION_TESTS",
             fallback: false,
             Get);
+        var allowProductionMutations = GetBool(
+            "ALLOW_PRODUCTION_MUTATIONS",
+            fallback: false,
+            Get);
         var requireAuthentication = GetBool(
             "REQUIRE_AUTHENTICATION",
             fallback: false,
@@ -83,9 +87,11 @@ internal static class TestSettingsLoader
                 "Production tests are blocked. Set ALLOW_PRODUCTION_TESTS=true to confirm the run.");
         }
 
-        var baseUrl = Get(
-            "BASE_URL",
-            localEnvironment?.BaseUrl ?? (isTestEnvironment ? TestBaseUrl : ProductionBaseUrl));
+        var defaultBaseUrl = isTestEnvironment ? TestBaseUrl : ProductionBaseUrl;
+        var profileBaseUrl = string.IsNullOrWhiteSpace(localEnvironment?.BaseUrl)
+            ? defaultBaseUrl
+            : localEnvironment.BaseUrl;
+        var baseUrl = Get("BASE_URL", profileBaseUrl);
         var loginEmail = Get(
             "OMEGA_EMAIL",
             localEnvironment?.LoginEmail ?? (isTestEnvironment ? TestLoginEmail : string.Empty));
@@ -95,12 +101,11 @@ internal static class TestSettingsLoader
         var searchData = CreateSearchData(localEnvironment?.Search, isTestEnvironment, Get);
 
         ValidateBaseUrl(environmentName, baseUrl);
-        ValidateCredentialsAndSearchData(
+        ValidateCredentials(
             environmentName,
             isProductionEnvironment,
             loginEmail,
             loginPassword,
-            searchData,
             requireAuthentication);
 
         return new TestSettings(
@@ -124,6 +129,7 @@ internal static class TestSettingsLoader
             LoginPassword: loginPassword,
             SearchData: searchData,
             AllowProductionTests: allowProductionTests,
+            AllowProductionMutations: allowProductionMutations,
             RequireAuthentication: requireAuthentication);
     }
 
@@ -230,20 +236,13 @@ internal static class TestSettingsLoader
         }
     }
 
-    private static void ValidateCredentialsAndSearchData(
+    private static void ValidateCredentials(
         string environmentName,
         bool isProductionEnvironment,
         string loginEmail,
         string loginPassword,
-        SearchTestData searchData,
         bool requireAuthentication)
     {
-        if (!searchData.IsConfigured)
-        {
-            throw new InvalidOperationException(
-                $"Search reference data are not configured for environment '{environmentName}'.");
-        }
-
         if (isProductionEnvironment && !TestSettings.IsConfigured(loginEmail))
         {
             throw new InvalidOperationException(

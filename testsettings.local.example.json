@@ -25,8 +25,8 @@
     "Production": {
       "baseUrl": "https://my.omega.page/",
       "searchMinimumIntervalSeconds": 10,
-      "loginEmail": "<production technical login>",
-      "loginPassword": "<production technical password>",
+      "loginEmail": "<production test-client login>",
+      "loginPassword": "<production test-client password>",
       "search": {
         "productCode": "<production product code>",
         "productCard": "<production product card>",

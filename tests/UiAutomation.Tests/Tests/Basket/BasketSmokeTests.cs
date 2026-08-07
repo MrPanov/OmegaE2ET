@@ -9,6 +9,7 @@ namespace UiAutomation.Tests.Tests.Basket;
 [Category("Basket")]
 [Category("Smoke")]
 [Category("P0")]
+[Category(TestCategories.ProductionTestClient)]
 [Category(TestCategories.MutatesUserState)]
 public sealed class BasketSmokeTests : AuthenticatedUiTestBase
 {
