@@ -14,11 +14,13 @@ object UiTests : BuildType({
     params {
         select(
             "env.OMEGA_ENVIRONMENT",
-            "Production",
+            "Test",
             label = "Target environment",
             description = "Production: my.omega.page; Test: test.omega.page",
-            options = listOf("Production", "Test")
+            options = listOf("Test", "Production")
         )
+        param("env.ALLOW_PRODUCTION_TESTS", "false")
+        param("env.REQUIRE_AUTHENTICATION", "true")
         param("env.OMEGA_EMAIL", "web@omega-auto.biz")
         select("env.BROWSER", "chrome", options = listOf("chrome", "edge", "firefox"))
         checkbox("env.HEADLESS", "true", checked = "true", unchecked = "false")

@@ -21,15 +21,19 @@ Selenium Manager автоматически подбирает драйвер у
 Поле `activeEnvironment` выбирает профиль:
 
 - `Test` — `https://test.omega.page/`, используется по умолчанию локально;
-- `Production` — `https://my.omega.page/`, используется в TeamCity.
+- `Production` — `https://my.omega.page/`, запускается только после явного подтверждения.
 
-Обе среды используют клиента `web@omega-auto.biz` и одинаковый набор эталонных
-поисковых данных. Перед локальным production-запуском заполните только
-`loginPassword` в профиле `Production`, затем измените `activeEnvironment` на
-`Production`. Чтобы вернуться на тестовый сервер, укажите `Test`. Переменные
+Для production требуется отдельный технический пользователь и отдельный набор
+эталонных поисковых данных. Тестовые значения по умолчанию в production не
+подставляются. Перед локальным production-запуском заполните весь профиль
+`Production`, выберите среду и дополнительно установите
+`ALLOW_PRODUCTION_TESTS=true`. Чтобы вернуться на тестовый сервер, укажите `Test`.
+Переменные
 `BASE_URL`, `OMEGA_EMAIL`, `OMEGA_PASSWORD`,
-`OMEGA_ENVIRONMENT`, `SEARCH_MIN_INTERVAL_SECONDS` и переменные `SEARCH_*` имеют
-приоритет над локальным файлом.
+`OMEGA_ENVIRONMENT`, `ALLOW_PRODUCTION_TESTS`, `REQUIRE_AUTHENTICATION`,
+`SEARCH_MIN_INTERVAL_SECONDS` и переменные `SEARCH_*` имеют приоритет над локальным
+файлом. `BASE_URL` обязан использовать HTTPS и домен выбранной среды, поэтому
+профиль `Test` нельзя направить на production.
 
 ```powershell
 $env:OMEGA_PASSWORD = "<пароль тестового пользователя>"
@@ -52,6 +56,8 @@ dotnet test --filter "TestCategory=P1"
 - `OMEGA_ENVIRONMENT=Test`
 - `BASE_URL=https://test.omega.page/`
 - `OMEGA_EMAIL=web@omega-auto.biz`
+- `ALLOW_PRODUCTION_TESTS=false`
+- `REQUIRE_AUTHENTICATION=false` локально и `true` в TeamCity
 - `BROWSER=chrome`
 - `HEADLESS=false` — локально браузер открывается в видимом режиме
 - `EXPLICIT_WAIT_SECONDS=20`
@@ -116,10 +122,11 @@ dotnet test --filter "TestCategory=P1"
    `runsettings/Production.runsettings` для боевого сайта.
 3. Запустите тесты через Test Explorer.
 
-Выбранный `.runsettings` задаёт только `OMEGA_ENVIRONMENT` и имеет приоритет над
-`activeEnvironment` из локального JSON. URL определяется автоматически. Пароль в
-`.runsettings` намеренно не хранится и по-прежнему читается из
-`testsettings.local.json` либо `OMEGA_PASSWORD`.
+Выбранный `.runsettings` имеет приоритет над `activeEnvironment` из локального JSON.
+Production-файл также задаёт `ALLOW_PRODUCTION_TESTS=true`: его явный выбор считается
+подтверждением запуска на боевом сайте. URL определяется автоматически. Пароль в
+`.runsettings` намеренно не хранится и по-прежнему читается из локального файла либо
+`OMEGA_PASSWORD`.
 
 Если локального файла нет, закройте уже открытую Visual Studio и запустите скрипт:
 
@@ -156,10 +163,11 @@ TeamCity как Versioned Settings и убедитесь, что на агент
 Создайте в TeamCity параметр `env.OMEGA_PASSWORD` типа **Password**. Остальные
 параметры можно переопределить в конфигурации или при ручном запуске. Versioned
 Settings добавляют выпадающий параметр `env.OMEGA_ENVIRONMENT`: при ручном
-запуске можно выбрать `Production` или `Test`. По умолчанию выбран `Production`.
+запуске можно выбрать `Test` или `Production`. По умолчанию всегда выбран `Test`.
 `BASE_URL` в TeamCity намеренно не задаётся: проект автоматически использует
 `https://my.omega.page/` для `Production` и `https://test.omega.page/` для `Test`.
-Логин задаётся как `env.OMEGA_EMAIL=web@omega-auto.biz`.
+`env.REQUIRE_AUTHENTICATION=true` не позволяет получить зелёный CI при отсутствии
+пароля. Обычная конфигурация также задаёт `env.ALLOW_PRODUCTION_TESTS=false`.
 
 Для явного локального выбора среды без редактирования JSON:
 
@@ -171,7 +179,9 @@ dotnet test
 
 # Production
 $env:OMEGA_ENVIRONMENT = "Production"
-$env:OMEGA_PASSWORD = "<пароль>"
+$env:ALLOW_PRODUCTION_TESTS = "true"
+$env:OMEGA_EMAIL = "<production technical login>"
+$env:OMEGA_PASSWORD = "<production password>"
 dotnet test
 ```
 

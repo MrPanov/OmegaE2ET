@@ -3,6 +3,7 @@
   <RunConfiguration>
     <EnvironmentVariables>
       <OMEGA_ENVIRONMENT>Production</OMEGA_ENVIRONMENT>
+      <ALLOW_PRODUCTION_TESTS>true</ALLOW_PRODUCTION_TESTS>
     </EnvironmentVariables>
   </RunConfiguration>
 </RunSettings>

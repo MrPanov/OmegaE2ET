@@ -22,7 +22,10 @@ public abstract class AuthenticatedUiTestFixture
     {
         Settings = TestSettings.FromEnvironment();
 
-        Assume.That(Settings.HasUsableLoginPassword, Is.True);
+        Assume.That(
+            Settings.HasUsableLoginPassword,
+            Is.True,
+            "Set OMEGA_PASSWORD or configure loginPassword in testsettings.local.json.");
 
         Driver = DriverFactory.Create(Settings);
         Timeout = TimeSpan.FromSeconds(Settings.ExplicitWaitSeconds);
