@@ -6,7 +6,7 @@ WebDriver и NUnit; запуск в CI настроен через TeamCity.
 
 ## Требования
 
-- .NET 8 SDK или новее
+- .NET SDK 8.0.423 или совместимый стабильный feature band .NET 8
 - Chrome, Edge или Firefox
 - TeamCity-агент с выбранным браузером
 
@@ -174,14 +174,30 @@ Kotlin DSL находится в `.teamcity/settings.kts`. Подключите 
 TeamCity как Versioned Settings и убедитесь, что на агенте установлены .NET SDK
 и браузер.
 
-Создайте в TeamCity параметр `env.OMEGA_PASSWORD` типа **Password**. Остальные
-параметры можно переопределить в конфигурации или при ручном запуске. Versioned
-Settings добавляют выпадающий параметр `env.OMEGA_ENVIRONMENT`: при ручном
-запуске можно выбрать `Test` или `Production`. По умолчанию всегда выбран `Test`.
-`BASE_URL` в TeamCity намеренно не задаётся: проект автоматически использует
-`https://my.omega.page/` для `Production` и `https://test.omega.page/` для `Test`.
-`env.REQUIRE_AUTHENTICATION=true` не позволяет получить зелёный CI при отсутствии
-пароля. Обычная конфигурация также задаёт `env.ALLOW_PRODUCTION_TESTS=false`.
+Создайте в TeamCity параметр `env.OMEGA_PASSWORD` типа **Password**. В каждой
+конфигурации `env.REQUIRE_AUTHENTICATION=true`, поэтому отсутствие секрета завершает
+сборку ошибкой, а не пропуском авторизованных тестов. `BASE_URL` намеренно не
+задаётся: проект сам выбирает разрешённый HTTPS-домен среды.
+
+Versioned Settings создают четыре независимые конфигурации:
+
+- `UI Smoke - Test` — автоматически запускает `Smoke` для всех веток, которые
+  VCS root TeamCity публикует как обычные или pull request branches;
+- `UI P0 Release - Test` — ручной release gate с категорией `P0`;
+- `UI P0 + P1 Nightly - Test` — каждый день в 02:00 запускает категории `P0` и `P1`;
+- `UI Read Only - Production` — только ручной production-запуск категории
+  `ProductionSafe`, дополнительно исключающий `MutatesUserState`.
+
+Production-конфигурация требует переопределить `env.OMEGA_EMAIL` отдельным
+техническим логином, безопасно задать `env.OMEGA_PASSWORD` и заполнить все
+production-переменные `SEARCH_*`. Basket, отрицательные login-сценарии и Search
+имеют `MutatesUserState` и блокируются как фильтром TeamCity, так и кодом.
+
+Каждая конфигурация выводит `dotnet --info`, восстанавливает зависимости, запускает
+configuration unit tests, а затем свой UI-набор.
+
+`global.json` фиксирует стабильный SDK 8.0.423 с `latestFeature` и запрещает preview.
+Такой SDK должен быть установлен и на TeamCity-агенте.
 
 Для явного локального выбора среды без редактирования JSON:
 
