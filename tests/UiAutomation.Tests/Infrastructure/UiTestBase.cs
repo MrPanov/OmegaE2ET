@@ -13,6 +13,7 @@ public abstract class UiTestBase
     public void SetUp()
     {
         Settings = TestSettings.FromEnvironment();
+        ProductionTestPolicy.EnsureCurrentTestIsAllowed(Settings);
         Driver = DriverFactory.Create(Settings);
     }
 

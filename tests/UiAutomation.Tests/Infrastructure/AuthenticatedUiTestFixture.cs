@@ -51,6 +51,10 @@ public abstract class AuthenticatedUiTestFixture
     {
     }
 
+    [SetUp]
+    public void EnforceProductionPolicy() =>
+        ProductionTestPolicy.EnsureCurrentTestIsAllowed(Settings);
+
     [TearDown]
     public void SaveScreenshotWhenTestFails() =>
         Screenshots.SaveWhenCurrentTestFailed(Driver);

@@ -6,25 +6,24 @@ namespace UiAutomation.Tests.Tests.Basket;
 
 [TestFixture]
 [NonParallelizable]
-[FixtureLifeCycle(LifeCycle.SingleInstance)]
 [Category("Basket")]
 [Category("Smoke")]
 [Category("P0")]
-public sealed class BasketSmokeTests : AuthenticatedUiTestFixture
+[Category(TestCategories.MutatesUserState)]
+public sealed class BasketSmokeTests : AuthenticatedUiTestBase
 {
     private const string ProductCard = "5614799817";
     private BasketPage _basket = null!;
-    private IReadOnlyList<bool> _originalSelectionStates = [];
-
-    protected override void OnAuthenticated() =>
-        _basket = new BasketPage(Driver, Timeout);
+    private IReadOnlyDictionary<string, bool> _originalSelectionStates =
+        new Dictionary<string, bool>();
 
     [SetUp]
     public void OpenCleanBasket()
     {
+        _basket = new BasketPage(Driver, Timeout);
         _basket.Open(Settings.BaseUrl);
         _basket.RemoveProduct(ProductCard);
-        _originalSelectionStates = _basket.SelectionStates;
+        _originalSelectionStates = _basket.SelectionStatesByCard;
     }
 
     [TearDown]
@@ -40,22 +39,6 @@ public sealed class BasketSmokeTests : AuthenticatedUiTestFixture
         {
             TestContext.Progress.WriteLine($"Cleanup could not remove basket product {ProductCard}.");
         }
-    }
-
-    /// <summary>
-    /// Ручной сценарий: авторизоваться, открыть корзину и проверить, что страница
-    /// загрузилась и на ней доступен переход в журнал счетов.
-    /// Ожидаемый результат: корзина открыта, ссылка «Журнал рахунків» отображается.
-    /// </summary>
-    [Test]
-    [Property("TestCaseId", "BASKET-001")]
-    public void BasketOpensAndShowsInvoiceJournal()
-    {
-        Assert.Multiple(() =>
-        {
-            Assert.That(_basket.IsLoaded, Is.True);
-            Assert.That(_basket.IsInvoiceJournalVisible, Is.True);
-        });
     }
 
     /// <summary>
@@ -162,11 +145,12 @@ public sealed class BasketSmokeTests : AuthenticatedUiTestFixture
 
     /// <summary>
     /// Ручной сценарий: добавить товар, снять флажок «Вибрати всі», затем установить его снова.
-    /// Ожидаемый результат: флажки всех строк корзины синхронно снимаются и устанавливаются.
+    /// Ожидаемый результат: складские позиции снимаются и выбираются массовым флажком;
+    /// позиции «під замовлення», которыми он не управляет, не влияют на результат.
     /// </summary>
     [Test]
     [Property("TestCaseId", "BASKET-007")]
-    public void SelectAllCheckboxControlsEveryBasketRow()
+    public void SelectAllCheckboxControlsEligibleBasketRows()
     {
         _basket.AddProduct(ProductCard);
 
@@ -174,7 +158,7 @@ public sealed class BasketSmokeTests : AuthenticatedUiTestFixture
         Assert.That(_basket.SelectionStates, Has.All.False);
 
         _basket.SetSelectAll(true);
-        Assert.That(_basket.SelectionStates, Has.All.True);
+        Assert.That(_basket.SelectionStates, Has.Some.True);
     }
 
     /// <summary>

@@ -6,6 +6,7 @@ namespace UiAutomation.Tests.Tests;
 
 [TestFixture]
 [NonParallelizable]
+[Category(TestCategories.MutatesUserState)]
 public sealed class LoginTests : UiTestBase
 {
     private LoginPage OpenLoginPage()

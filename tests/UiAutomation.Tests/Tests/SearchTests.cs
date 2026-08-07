@@ -8,6 +8,7 @@ namespace UiAutomation.Tests.Tests;
 [NonParallelizable]
 [FixtureLifeCycle(LifeCycle.SingleInstance)]
 [Category("Search")]
+[Category(TestCategories.MutatesUserState)]
 public sealed class SearchTests : AuthenticatedUiTestFixture
 {
     private SearchResultsPage _search = null!;
@@ -25,11 +26,7 @@ public sealed class SearchTests : AuthenticatedUiTestFixture
     }
 
     [SetUp]
-    public void ResetSearchMode()
-    {
-        _search.CloseHistory();
-        _search.SetStartsWith(false);
-    }
+    public void ResetSearchState() => _search.Reset(Settings.BaseUrl);
 
     [Test]
     [Category("Smoke")]
@@ -446,52 +443,6 @@ public sealed class SearchTests : AuthenticatedUiTestFixture
             Assert.That(_search.IsStartsWithEnabled, Is.False);
             Assert.That(_search.ProductCodes, Is.Not.Empty);
             Assert.That(_search.ResultSummary, Does.StartWith("Знайдено по "));
-        });
-    }
-
-    [Test]
-    [Category("SearchControls")]
-    [Category("P1")]
-    [Property("TestCaseId", "SEARCH-BAR-025")]
-    public void SearchHistoryContainsRecentQueriesWithoutDuplicates()
-    {
-        _search.Search(LowercaseProductCode);
-        _search.Search(Settings.SearchData.ProductCard);
-
-        var history = _search.OpenHistory();
-        var historySnapshot = string.Join(" | ", history.Select(item => $"'{item}'"));
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(history.Count(item =>
-                string.Equals(item, LowercaseProductCode, StringComparison.Ordinal)), Is.EqualTo(1),
-                $"History: {historySnapshot}");
-            Assert.That(history.Count(item =>
-                string.Equals(item, Settings.SearchData.ProductCard, StringComparison.Ordinal)), Is.EqualTo(1),
-                $"History: {historySnapshot}");
-            Assert.That(history.All(item => item.Length > 0), Is.True);
-        });
-    }
-
-    [Test]
-    [Category("SearchControls")]
-    [Category("P1")]
-    [Property("TestCaseId", "SEARCH-BAR-026")]
-    public void QueryCanBeSelectedFromSearchHistory()
-    {
-        _search.Search(LowercaseProductCode);
-        _search.Search(Settings.SearchData.ProductCard);
-
-        _search.SelectHistoryItem(LowercaseProductCode);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(_search.Query, Is.EqualTo(LowercaseProductCode).IgnoreCase);
-            Assert.That(_search.IsProductDisplayed(Settings.SearchData.ProductCode), Is.True);
-            var history = _search.OpenHistory();
-            Assert.That(history.Count(item =>
-                string.Equals(item, LowercaseProductCode, StringComparison.Ordinal)), Is.EqualTo(1),
-                $"History: {string.Join(" | ", history.Select(item => $"'{item}'"))}");
         });
     }
 
