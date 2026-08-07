@@ -6,4 +6,8 @@
       <ALLOW_PRODUCTION_TESTS>true</ALLOW_PRODUCTION_TESTS>
     </EnvironmentVariables>
   </RunConfiguration>
+  <TestRunParameters>
+    <Parameter name="OMEGA_ENVIRONMENT" value="Production" />
+    <Parameter name="ALLOW_PRODUCTION_TESTS" value="true" />
+  </TestRunParameters>
 </RunSettings>

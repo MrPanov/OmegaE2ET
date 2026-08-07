@@ -5,4 +5,7 @@
       <OMEGA_ENVIRONMENT>Test</OMEGA_ENVIRONMENT>
     </EnvironmentVariables>
   </RunConfiguration>
+  <TestRunParameters>
+    <Parameter name="OMEGA_ENVIRONMENT" value="Test" />
+  </TestRunParameters>
 </RunSettings>

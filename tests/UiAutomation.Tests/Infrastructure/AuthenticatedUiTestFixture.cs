@@ -53,7 +53,14 @@ public abstract class AuthenticatedUiTestFixture
 
     [SetUp]
     public void EnforceProductionPolicy() =>
+        EnsureProductionPolicyAndReportEnvironment();
+
+    private void EnsureProductionPolicyAndReportEnvironment()
+    {
+        TestContext.Out.WriteLine(
+            $"E2E environment: {Settings.EnvironmentName}; Base URL: {Settings.BaseUrl}");
         ProductionTestPolicy.EnsureCurrentTestIsAllowed(Settings);
+    }
 
     [TearDown]
     public void SaveScreenshotWhenTestFails() =>

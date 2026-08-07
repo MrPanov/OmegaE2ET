@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using NUnit.Framework;
 
 namespace UiAutomation.Tests.Configuration;
 
@@ -32,7 +33,15 @@ internal static class TestSettingsLoader
     public static TestSettings LoadFromProcess()
     {
         var localSettings = LoadLocalSettings();
-        return Load(Environment.GetEnvironmentVariable, localSettings);
+        return Load(GetRunSetting, localSettings);
+    }
+
+    private static string? GetRunSetting(string name)
+    {
+        var testRunParameter = TestContext.Parameters.Get(name);
+        return !string.IsNullOrWhiteSpace(testRunParameter)
+            ? testRunParameter
+            : Environment.GetEnvironmentVariable(name);
     }
 
     internal static TestSettings Load(
