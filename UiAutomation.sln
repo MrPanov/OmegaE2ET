@@ -10,7 +10,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Documentation", "Documentat
 		docs\manual-tests\catalogs.md = docs\manual-tests\catalogs.md
 		docs\manual-tests\login-page.md = docs\manual-tests\login-page.md
 		runsettings\Production.runsettings = runsettings\Production.runsettings
-		runsettings\ProductionReadOnly.runsettings = runsettings\ProductionReadOnly.runsettings
 		runsettings\Test.runsettings = runsettings\Test.runsettings
 		scripts\start-visual-studio.ps1 = scripts\start-visual-studio.ps1
 	EndProjectSection

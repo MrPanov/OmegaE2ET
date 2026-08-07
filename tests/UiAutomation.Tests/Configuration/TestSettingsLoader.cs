@@ -76,10 +76,6 @@ internal static class TestSettingsLoader
             "ALLOW_PRODUCTION_TESTS",
             fallback: false,
             Get);
-        var allowProductionMutations = GetBool(
-            "ALLOW_PRODUCTION_MUTATIONS",
-            fallback: false,
-            Get);
         var requireAuthentication = GetBool(
             "REQUIRE_AUTHENTICATION",
             fallback: false,
@@ -139,7 +135,6 @@ internal static class TestSettingsLoader
             LoginPassword: loginPassword,
             SearchData: searchData,
             AllowProductionTests: allowProductionTests,
-            AllowProductionMutations: allowProductionMutations,
             RequireAuthentication: requireAuthentication);
     }
 

@@ -63,20 +63,17 @@ object UiProductionTestClientTests : BuildType({
     configureUiTests(
         testFilter = "(TestCategory=ProductionSafe|TestCategory=ProductionTestClient)&TestCategory!=ProductionBlocked",
         environmentName = "Production",
-        allowProduction = true,
-        allowProductionMutations = true)
+        allowProduction = true)
 })
 
 fun BuildType.configureUiTests(
     testFilter: String,
     environmentName: String = "Test",
-    allowProduction: Boolean = false,
-    allowProductionMutations: Boolean = false)
+    allowProduction: Boolean = false)
 {
     params {
         param("env.OMEGA_ENVIRONMENT", environmentName)
         param("env.ALLOW_PRODUCTION_TESTS", allowProduction.toString())
-        param("env.ALLOW_PRODUCTION_MUTATIONS", allowProductionMutations.toString())
         param("env.REQUIRE_AUTHENTICATION", "true")
         param(
             "env.OMEGA_EMAIL",

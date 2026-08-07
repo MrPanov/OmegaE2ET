@@ -4,7 +4,6 @@
     <EnvironmentVariables>
       <OMEGA_ENVIRONMENT>Production</OMEGA_ENVIRONMENT>
       <ALLOW_PRODUCTION_TESTS>true</ALLOW_PRODUCTION_TESTS>
-      <ALLOW_PRODUCTION_MUTATIONS>true</ALLOW_PRODUCTION_MUTATIONS>
     </EnvironmentVariables>
   </RunConfiguration>
 </RunSettings>

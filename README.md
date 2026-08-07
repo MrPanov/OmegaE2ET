@@ -30,13 +30,10 @@ Selenium Manager автоматически подбирает драйвер у
 в игнорируемом файле. Для Basket достаточно заполнить учётные данные профиля `Test`;
 для полного прогона Search заполните также весь блок `search`. Затем выберите среду
 и дополнительно установите
-`ALLOW_PRODUCTION_TESTS=true`. Изменения корзины и поисковой истории тестового
-клиента дополнительно требуют `ALLOW_PRODUCTION_MUTATIONS=true`. Чтобы вернуться
-на тестовый сервер, укажите `Test`.
+`ALLOW_PRODUCTION_TESTS=true`. Чтобы вернуться на тестовый сервер, укажите `Test`.
 Переменные
 `BASE_URL`, `OMEGA_EMAIL`, `OMEGA_PASSWORD`,
-`OMEGA_ENVIRONMENT`, `ALLOW_PRODUCTION_TESTS`, `ALLOW_PRODUCTION_MUTATIONS`,
-`REQUIRE_AUTHENTICATION`,
+`OMEGA_ENVIRONMENT`, `ALLOW_PRODUCTION_TESTS`, `REQUIRE_AUTHENTICATION`,
 `SEARCH_MIN_INTERVAL_SECONDS` и переменные `SEARCH_*` имеют приоритет над локальным
 файлом. `BASE_URL` обязан использовать HTTPS и домен выбранной среды, поэтому
 профиль `Test` нельзя направить на production.
@@ -63,7 +60,6 @@ dotnet test --filter "TestCategory=P1"
 - `BASE_URL=https://test.omega.page/`
 - `OMEGA_EMAIL=web@omega-auto.biz`
 - `ALLOW_PRODUCTION_TESTS=false`
-- `ALLOW_PRODUCTION_MUTATIONS=false`
 - `REQUIRE_AUTHENTICATION=false` локально и `true` в TeamCity
 - `BROWSER=chrome`
 - `HEADLESS=false` — локально браузер открывается в видимом режиме
@@ -128,10 +124,10 @@ Basket-сценарии разделены по влиянию на данные
 `MutatesUserState`, получают новую браузерную сессию для каждого теста и очищают
 эталонный товар до и после проверки.
 
-В production кодовый policy сразу разрешает `ProductionSafe`. Тесты одновременно
-помеченные `ProductionTestClient` и `MutatesUserState` разрешаются только при
-`ALLOW_PRODUCTION_MUTATIONS=true`. Категория `ProductionBlocked` всегда запрещена и
-предназначена для будущих сценариев заказов, оплат и других опасных операций.
+В production кодовый policy разрешает `ProductionSafe` и контролируемые изменения
+тестов, одновременно помеченных `ProductionTestClient` и `MutatesUserState`.
+Категория `ProductionBlocked` всегда запрещена и предназначена для будущих сценариев
+заказов, оплат и других опасных операций.
 
 ### Запуск из Visual Studio с видимым браузером
 
@@ -143,14 +139,12 @@ Basket-сценарии разделены по влиянию на данные
 1. `Test → Configure Run Settings → Select Solution Wide runsettings File`.
 2. Выберите один профиль:
    - `runsettings/Test.runsettings` — тестовый сайт;
-   - `runsettings/ProductionReadOnly.runsettings` — только безопасное чтение Production;
    - `runsettings/Production.runsettings` — полный прогон тестового клиента в Production.
 3. Запустите тесты через Test Explorer.
 
 Выбранный `.runsettings` имеет приоритет над `activeEnvironment` из локального JSON.
-Оба Production-файла задают `ALLOW_PRODUCTION_TESTS=true`. Полный
-`Production.runsettings` дополнительно задаёт `ALLOW_PRODUCTION_MUTATIONS=true` и
-разрешает контролируемые изменения только внутри тестового клиента. URL определяется
+`Production.runsettings` задаёт `ALLOW_PRODUCTION_TESTS=true` и разрешает
+контролируемые изменения только внутри тестового клиента. URL определяется
 автоматически. Пароль в
 `.runsettings` намеренно не хранится и по-прежнему читается из локального файла либо
 `OMEGA_PASSWORD`.
@@ -205,9 +199,8 @@ Versioned Settings создают пять независимых конфигу
 
 Production-конфигурации требуют переопределить `env.OMEGA_EMAIL` логином тестового
 клиента, безопасно задать `env.OMEGA_PASSWORD` и заполнить все production-переменные
-`SEARCH_*`. Полный прогон задаёт `ALLOW_PRODUCTION_MUTATIONS=true`; Basket и Search
-работают только с данными этого клиента. `ProductionBlocked` исключается фильтром и
-дополнительно блокируется кодом.
+`SEARCH_*`. Basket и Search работают только с данными этого клиента.
+`ProductionBlocked` исключается фильтром и дополнительно блокируется кодом.
 
 Каждая конфигурация выводит `dotnet --info`, восстанавливает зависимости и запускает
 свой E2E/UI-набор.
@@ -226,7 +219,6 @@ dotnet test
 # Production
 $env:OMEGA_ENVIRONMENT = "Production"
 $env:ALLOW_PRODUCTION_TESTS = "true"
-$env:ALLOW_PRODUCTION_MUTATIONS = "true"
 $env:OMEGA_EMAIL = "<production test-client login>"
 $env:OMEGA_PASSWORD = "<production password>"
 dotnet test
