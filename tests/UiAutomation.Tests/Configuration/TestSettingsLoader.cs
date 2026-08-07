@@ -67,6 +67,10 @@ internal static class TestSettingsLoader
                 environmentName,
                 StringComparison.OrdinalIgnoreCase))
             .Value;
+        var credentialsEnvironment = ResolveCredentialsEnvironment(
+            localSettings,
+            localEnvironment,
+            environmentName);
 
         var allowProductionTests = GetBool(
             "ALLOW_PRODUCTION_TESTS",
@@ -94,10 +98,16 @@ internal static class TestSettingsLoader
         var baseUrl = Get("BASE_URL", profileBaseUrl);
         var loginEmail = Get(
             "OMEGA_EMAIL",
-            localEnvironment?.LoginEmail ?? (isTestEnvironment ? TestLoginEmail : string.Empty));
+            FirstConfigured(
+                localEnvironment?.LoginEmail,
+                credentialsEnvironment?.LoginEmail,
+                isTestEnvironment ? TestLoginEmail : string.Empty));
         var loginPassword = Get(
             "OMEGA_PASSWORD",
-            localEnvironment?.LoginPassword ?? string.Empty);
+            FirstConfigured(
+                localEnvironment?.LoginPassword,
+                credentialsEnvironment?.LoginPassword,
+                string.Empty));
         var searchData = CreateSearchData(localEnvironment?.Search, isTestEnvironment, Get);
 
         ValidateBaseUrl(environmentName, baseUrl);
@@ -132,6 +142,31 @@ internal static class TestSettingsLoader
             AllowProductionMutations: allowProductionMutations,
             RequireAuthentication: requireAuthentication);
     }
+
+    private static LocalEnvironmentSettings? ResolveCredentialsEnvironment(
+        LocalTestSettings? localSettings,
+        LocalEnvironmentSettings? localEnvironment,
+        string environmentName)
+    {
+        var sourceName = localEnvironment?.CredentialsFromEnvironment?.Trim();
+        if (string.IsNullOrWhiteSpace(sourceName)) return null;
+
+        var source = localSettings?.Environments?
+            .FirstOrDefault(item => string.Equals(
+                item.Key,
+                sourceName,
+                StringComparison.OrdinalIgnoreCase))
+            .Value;
+        if (source is not null) return source;
+
+        throw new InvalidOperationException(
+            $"Credentials source environment '{sourceName}' configured for " +
+            $"'{environmentName}' was not found in testsettings.local.json.");
+    }
+
+    private static string FirstConfigured(params string?[] values) =>
+        values.FirstOrDefault(value =>
+            value is not null && TestSettings.IsConfigured(value)) ?? string.Empty;
 
     private static SearchTestData CreateSearchData(
         LocalSearchTestData? local,
@@ -313,7 +348,8 @@ internal sealed record LocalEnvironmentSettings(
     int? SearchMinimumIntervalSeconds,
     string? LoginEmail,
     string? LoginPassword,
-    LocalSearchTestData? Search);
+    LocalSearchTestData? Search,
+    string? CredentialsFromEnvironment = null);
 
 internal sealed record LocalSearchTestData(
     string? ProductCode,

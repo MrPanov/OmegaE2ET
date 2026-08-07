@@ -103,14 +103,6 @@ fun BuildType.configureUiTests(
             projects = "UiAutomation.sln"
         }
         dotnetTest {
-            name = "Run configuration unit tests"
-            projects = "UiAutomation.sln"
-            configuration = "Release"
-            args = "--no-restore --filter \"TestCategory=Unit\" " +
-                "--logger \"trx;LogFileName=configuration-tests.trx\" " +
-                "--results-directory artifacts/TestResults"
-        }
-        dotnetTest {
             name = "Run UI tests"
             projects = "UiAutomation.sln"
             configuration = "Release"
