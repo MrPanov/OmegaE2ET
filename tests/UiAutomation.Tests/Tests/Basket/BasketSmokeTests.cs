@@ -42,6 +42,11 @@ public sealed class BasketSmokeTests : AuthenticatedUiTestFixture
         }
     }
 
+    /// <summary>
+    /// Ручной сценарий: авторизоваться, открыть корзину и проверить, что страница
+    /// загрузилась и на ней доступен переход в журнал счетов.
+    /// Ожидаемый результат: корзина открыта, ссылка «Журнал рахунків» отображается.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "BASKET-001")]
     public void BasketOpensAndShowsInvoiceJournal()
@@ -53,6 +58,11 @@ public sealed class BasketSmokeTests : AuthenticatedUiTestFixture
         });
     }
 
+    /// <summary>
+    /// Ручной сценарий: ввести номер карточки товара в поле добавления корзины,
+    /// подтвердить ввод и повторить добавление той же карточки.
+    /// Ожидаемый результат: товар присутствует в корзине только в одной строке.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "BASKET-002")]
     public void ProductCanBeAddedByCardWithoutDuplicate()
@@ -62,6 +72,11 @@ public sealed class BasketSmokeTests : AuthenticatedUiTestFixture
         Assert.That(_basket.ProductCards.Count(card => card == ProductCard), Is.EqualTo(1));
     }
 
+    /// <summary>
+    /// Ручной сценарий: добавить эталонный товар по номеру карточки и проверить
+    /// отображаемые в его строке карточку, код, название, цену, количество и остатки.
+    /// Ожидаемый результат: обязательные данные заполнены и относятся к добавленному товару.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "BASKET-003")]
     public void ProductRowShowsRequiredData()
@@ -82,6 +97,12 @@ public sealed class BasketSmokeTests : AuthenticatedUiTestFixture
         });
     }
 
+    /// <summary>
+    /// Ручной сценарий: добавить товар и сопоставить заголовки складов со значениями
+    /// остатков в строке товара слева направо.
+    /// Ожидаемый результат: каждому складу соответствует значение остатка и хотя бы
+    /// на одном складе товар доступен.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "BASKET-004")]
     public void WarehouseHeadersMatchStockValuesByIndex()
@@ -98,6 +119,12 @@ public sealed class BasketSmokeTests : AuthenticatedUiTestFixture
         });
     }
 
+    /// <summary>
+    /// Ручной сценарий: добавить и выбрать товар, увеличить и уменьшить количество,
+    /// затем попытаться установить нулевое количество.
+    /// Ожидаемый результат: итоговая сумма пересчитывается, а количество меньше единицы
+    /// не принимается.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "BASKET-005")]
     public void QuantityControlsRecalculateSelectedTotalAndRejectInvalidValue()
@@ -116,6 +143,11 @@ public sealed class BasketSmokeTests : AuthenticatedUiTestFixture
         Assert.That(_basket.ProductQuantity(ProductCard), Is.GreaterThanOrEqualTo(1));
     }
 
+    /// <summary>
+    /// Ручной сценарий: добавить товар, оставить выбранным только его и сравнить
+    /// общую сумму выбранных позиций с ценой, умноженной на количество.
+    /// Ожидаемый результат: итог учитывает только выбранный товар.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "BASKET-006")]
     public void SelectedTotalIncludesOnlyCheckedProduct()
@@ -128,6 +160,10 @@ public sealed class BasketSmokeTests : AuthenticatedUiTestFixture
         Assert.That(_basket.SelectedTotal, Is.EqualTo(product.Price * product.Quantity));
     }
 
+    /// <summary>
+    /// Ручной сценарий: добавить товар, снять флажок «Вибрати всі», затем установить его снова.
+    /// Ожидаемый результат: флажки всех строк корзины синхронно снимаются и устанавливаются.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "BASKET-007")]
     public void SelectAllCheckboxControlsEveryBasketRow()
@@ -141,6 +177,10 @@ public sealed class BasketSmokeTests : AuthenticatedUiTestFixture
         Assert.That(_basket.SelectionStates, Has.All.True);
     }
 
+    /// <summary>
+    /// Ручной сценарий: запомнить существующие позиции, добавить эталонный товар и удалить его.
+    /// Ожидаемый результат: удаляется только эталонный товар, остальные строки не изменяются.
+    /// </summary>
     [Test]
     [Property("TestCaseId", "BASKET-008")]
     public void RemovingProductDoesNotRemoveOtherRows()
