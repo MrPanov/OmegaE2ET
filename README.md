@@ -1,12 +1,13 @@
 # Omega UI Automation
 
-Проект автоматизации и ручного тестирования авторизации на
-`https://test.omega.page/`. Автотесты реализованы на .NET 8, Selenium
-WebDriver и NUnit; запуск в CI настроен через TeamCity.
+Проект автоматизации и ручного тестирования Omega на Test и Production.
+Production-проверки работают только с изолированным тестовым клиентом в боевой
+базе. Автотесты реализованы на .NET 8, Selenium WebDriver и NUnit; запуск в CI
+настроен через TeamCity.
 
 ## Требования
 
-- .NET 8 SDK или новее
+- .NET SDK 8.0.423 или совместимый стабильный feature band .NET 8
 - Chrome, Edge или Firefox
 - TeamCity-агент с выбранным браузером
 
@@ -20,15 +21,22 @@ Selenium Manager автоматически подбирает драйвер у
 
 Поле `activeEnvironment` выбирает профиль:
 
-- `Test` — тестовый сервер и тестовый пользователь;
-- `Production` — production-сервер и production-клиент.
+- `Test` — `https://test.omega.page/`, используется по умолчанию локально;
+- `Production` — `https://my.omega.page/`, запускается только после явного подтверждения.
 
-Перед первым production-запуском заполните в профиле `Production` поля `baseUrl`,
-`loginEmail`, `loginPassword` и весь блок `search` с эталонным товаром production-клиента,
-затем измените `activeEnvironment` на `Production`. Чтобы вернуться на тестовый сервер,
-укажите `Test`. Переменные `BASE_URL`, `OMEGA_EMAIL`, `OMEGA_PASSWORD`,
-`OMEGA_ENVIRONMENT`, `SEARCH_MIN_INTERVAL_SECONDS` и переменные `SEARCH_*` имеют
-приоритет над локальным файлом.
+Для production используется тот же изолированный тестовый клиент. Production-профиль
+может получить его логин и пароль из локального профиля `Test` через
+`credentialsFromEnvironment: "Test"`, поэтому секрет не дублируется и остаётся только
+в игнорируемом файле. Для Basket достаточно заполнить учётные данные профиля `Test`;
+для полного прогона Search заполните также весь блок `search`. Затем выберите среду
+и дополнительно установите
+`ALLOW_PRODUCTION_TESTS=true`. Чтобы вернуться на тестовый сервер, укажите `Test`.
+Переменные
+`BASE_URL`, `OMEGA_EMAIL`, `OMEGA_PASSWORD`,
+`OMEGA_ENVIRONMENT`, `ALLOW_PRODUCTION_TESTS`, `REQUIRE_AUTHENTICATION`,
+`SEARCH_MIN_INTERVAL_SECONDS` и переменные `SEARCH_*` имеют приоритет над локальным
+файлом. `BASE_URL` обязан использовать HTTPS и домен выбранной среды, поэтому
+профиль `Test` нельзя направить на production.
 
 ```powershell
 $env:OMEGA_PASSWORD = "<пароль тестового пользователя>"
@@ -48,8 +56,11 @@ dotnet test --filter "TestCategory=P1"
 
 Настройки по умолчанию:
 
+- `OMEGA_ENVIRONMENT=Test`
 - `BASE_URL=https://test.omega.page/`
 - `OMEGA_EMAIL=web@omega-auto.biz`
+- `ALLOW_PRODUCTION_TESTS=false`
+- `REQUIRE_AUTHENTICATION=false` локально и `true` в TeamCity
 - `BROWSER=chrome`
 - `HEADLESS=false` — локально браузер открывается в видимом режиме
 - `EXPLICIT_WAIT_SECONDS=20`
@@ -102,10 +113,48 @@ dotnet test --filter "TestCategory=P1"
 поисками автотесты выдерживают настраиваемый интервал, необходимый из-за ограничения
 частоты запросов сервера.
 
+Перед каждым поисковым тестом восстанавливаются исходный маршрут, пустая строка
+поиска, закрытая история и выключенный режим «починається з». Сценарии истории
+вынесены в отдельный `SearchHistoryTests`, чтобы они не зависели от остальных
+поисковых проверок.
+
+Basket-сценарии разделены по влиянию на данные. Read-only проверка открытия корзины
+находится в `BasketReadOnlySmokeTests`. Тесты добавления, удаления и изменения
+количества находятся в `BasketSmokeTests`, помечены `ProductionTestClient` и
+`MutatesUserState`, получают новую браузерную сессию для каждого теста и очищают
+только те товары, которые добавил конкретный тест. Каждый сценарий использует
+собственную карточку, поэтому результаты и cleanup не пересекаются. Исходное
+состояние чекбоксов восстанавливается с учётом повторяющихся карточек.
+
+Создание и проверка резервного счёта вынесены в отдельный
+`InvoiceReservationSmokeTests`. Этот fixture создаёт реальный счёт тестового
+клиента и поэтому также относится к `ProductionTestClient` и `MutatesUserState`.
+
+В production кодовый policy разрешает `ProductionSafe` и контролируемые изменения
+тестов, одновременно помеченных `ProductionTestClient` и `MutatesUserState`.
+Категория `ProductionBlocked` всегда запрещена и предназначена для будущих сценариев
+заказов, оплат и других опасных операций.
+
 ### Запуск из Visual Studio с видимым браузером
 
 Если заполнен `testsettings.local.json`, Visual Studio можно открыть обычным способом:
 пароль, активная среда и эталонные поисковые данные будут прочитаны из локального файла.
+
+Для переключения среды непосредственно в Visual Studio выберите:
+
+1. `Test → Configure Run Settings → Select Solution Wide runsettings File`.
+2. Выберите один профиль:
+   - `runsettings/Test.runsettings` — тестовый сайт;
+   - `runsettings/Production.runsettings` — полный прогон тестового клиента в Production.
+3. Запустите тесты через Test Explorer.
+
+Выбранный `.runsettings` имеет приоритет над `activeEnvironment` из локального JSON.
+`Production.runsettings` задаёт `ALLOW_PRODUCTION_TESTS=true` и разрешает
+контролируемые изменения только внутри тестового клиента. URL определяется
+автоматически. Пароль в
+`.runsettings` намеренно не хранится и по-прежнему читается из локального файла либо
+`OMEGA_PASSWORD`.
+
 Если локального файла нет, закройте уже открытую Visual Studio и запустите скрипт:
 
 ```powershell
@@ -138,6 +187,46 @@ Kotlin DSL находится в `.teamcity/settings.kts`. Подключите 
 TeamCity как Versioned Settings и убедитесь, что на агенте установлены .NET SDK
 и браузер.
 
-Создайте в TeamCity параметр `env.OMEGA_PASSWORD` типа **Password**. Остальные
-параметры можно переопределить в конфигурации или при ручном запуске.
+Создайте в TeamCity параметр `env.OMEGA_PASSWORD` типа **Password**. В каждой
+конфигурации `env.REQUIRE_AUTHENTICATION=true`, поэтому отсутствие секрета завершает
+сборку ошибкой, а не пропуском авторизованных тестов. `BASE_URL` намеренно не
+задаётся: проект сам выбирает разрешённый HTTPS-домен среды.
+
+Versioned Settings создают пять независимых конфигураций:
+
+- `UI Smoke - Test` — автоматически запускает `Smoke` для всех веток, которые
+  VCS root TeamCity публикует как обычные или pull request branches;
+- `UI P0 Release - Test` — ручной release gate с категорией `P0`;
+- `UI P0 + P1 Nightly - Test` — каждый день в 02:00 запускает категории `P0` и `P1`;
+- `UI Read Only - Production` — только ручной production-запуск категории
+  `ProductionSafe`, дополнительно исключающий изменения и `ProductionBlocked`;
+- `UI Test Client - Production` — ручной полный прогон безопасных тестов и
+  контролируемых изменений изолированного тестового клиента.
+
+Production-конфигурации требуют переопределить `env.OMEGA_EMAIL` логином тестового
+клиента, безопасно задать `env.OMEGA_PASSWORD` и заполнить все production-переменные
+`SEARCH_*`. Basket и Search работают только с данными этого клиента.
+`ProductionBlocked` исключается фильтром и дополнительно блокируется кодом.
+
+Каждая конфигурация выводит `dotnet --info`, восстанавливает зависимости и запускает
+свой E2E/UI-набор.
+
+`global.json` фиксирует стабильный SDK 8.0.423 с `latestFeature` и запрещает preview.
+Такой SDK должен быть установлен и на TeamCity-агенте.
+
+Для явного локального выбора среды без редактирования JSON:
+
+```powershell
+# Test (по умолчанию)
+$env:OMEGA_ENVIRONMENT = "Test"
+$env:OMEGA_PASSWORD = "<пароль>"
+dotnet test
+
+# Production
+$env:OMEGA_ENVIRONMENT = "Production"
+$env:ALLOW_PRODUCTION_TESTS = "true"
+$env:OMEGA_EMAIL = "<production test-client login>"
+$env:OMEGA_PASSWORD = "<production password>"
+dotnet test
+```
 

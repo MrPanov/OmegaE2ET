@@ -8,6 +8,7 @@ namespace UiAutomation.Tests.Tests;
 [NonParallelizable]
 [FixtureLifeCycle(LifeCycle.SingleInstance)]
 [Category("MainMenu")]
+[Category(TestCategories.ProductionSafe)]
 public sealed class MainMenuTests : AuthenticatedUiTestFixture
 {
     private MainMenuPage _mainMenu = null!;

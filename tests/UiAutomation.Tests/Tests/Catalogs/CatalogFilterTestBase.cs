@@ -9,6 +9,7 @@ namespace UiAutomation.Tests.Tests.Catalogs;
 /// Each concrete fixture names its catalog and exposes only the scenarios that
 /// are supported by that catalog.
 /// </summary>
+[Category(TestCategories.ProductionSafe)]
 public abstract class CatalogFilterTestBase : AuthenticatedUiTestFixture
 {
     private const string BrandFacet = "Бренд";

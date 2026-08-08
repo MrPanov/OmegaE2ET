@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <RunConfiguration>
+    <EnvironmentVariables>
+      <OMEGA_ENVIRONMENT>Production</OMEGA_ENVIRONMENT>
+      <ALLOW_PRODUCTION_TESTS>true</ALLOW_PRODUCTION_TESTS>
+    </EnvironmentVariables>
+  </RunConfiguration>
+  <TestRunParameters>
+    <Parameter name="OMEGA_ENVIRONMENT" value="Production" />
+    <Parameter name="ALLOW_PRODUCTION_TESTS" value="true" />
+  </TestRunParameters>
+</RunSettings>

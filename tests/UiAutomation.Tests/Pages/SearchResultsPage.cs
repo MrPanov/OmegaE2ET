@@ -60,6 +60,15 @@ public sealed class SearchResultsPage
 
     public IReadOnlyList<string> StartsWithCodes => _results.StartsWithCodes;
 
+    public void Reset(string baseUrl)
+    {
+        _driver.Navigate().GoToUrl(baseUrl);
+        WaitUntilPageIsReady();
+        _history.Close();
+        _bar.SetStartsWith(false);
+        _bar.ReplaceQuery(string.Empty);
+    }
+
     public void Search(string query)
     {
         WaitUntilPageIsReady();

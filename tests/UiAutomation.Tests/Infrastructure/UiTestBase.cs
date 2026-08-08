@@ -13,6 +13,9 @@ public abstract class UiTestBase
     public void SetUp()
     {
         Settings = TestSettings.FromEnvironment();
+        TestContext.Out.WriteLine(
+            $"E2E environment: {Settings.EnvironmentName}; Base URL: {Settings.BaseUrl}");
+        ProductionTestPolicy.EnsureCurrentTestIsAllowed(Settings);
         Driver = DriverFactory.Create(Settings);
     }
 

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <RunConfiguration>
+    <EnvironmentVariables>
+      <OMEGA_ENVIRONMENT>Test</OMEGA_ENVIRONMENT>
+    </EnvironmentVariables>
+  </RunConfiguration>
+  <TestRunParameters>
+    <Parameter name="OMEGA_ENVIRONMENT" value="Test" />
+  </TestRunParameters>
+</RunSettings>

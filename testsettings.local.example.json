@@ -23,10 +23,9 @@
       }
     },
     "Production": {
-      "baseUrl": "<production URL>",
+      "baseUrl": "https://my.omega.page/",
       "searchMinimumIntervalSeconds": 10,
-      "loginEmail": "<production client login>",
-      "loginPassword": "<production client password>",
+      "credentialsFromEnvironment": "Test",
       "search": {
         "productCode": "<production product code>",
         "productCard": "<production product card>",

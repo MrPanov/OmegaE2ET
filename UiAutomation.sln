@@ -4,11 +4,13 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UiAutomation.Tests", "tests\UiAutomation.Tests\UiAutomation.Tests.csproj", "{2C217BCF-5285-47E2-A767-E75C34DCB834}"
 EndProject
-Project("{66A26720-8FB5-11D2-AA7E-00C04F688DDE}") = "Documentation", "Documentation", "{74B060AF-D430-4B69-AEED-8E243BC7D09E}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Documentation", "Documentation", "{74B060AF-D430-4B69-AEED-8E243BC7D09E}"
 	ProjectSection(SolutionItems) = preProject
 		README.md = README.md
 		docs\manual-tests\catalogs.md = docs\manual-tests\catalogs.md
 		docs\manual-tests\login-page.md = docs\manual-tests\login-page.md
+		runsettings\Production.runsettings = runsettings\Production.runsettings
+		runsettings\Test.runsettings = runsettings\Test.runsettings
 		scripts\start-visual-studio.ps1 = scripts\start-visual-studio.ps1
 	EndProjectSection
 EndProject
