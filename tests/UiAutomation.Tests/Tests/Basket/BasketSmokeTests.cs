@@ -11,37 +11,8 @@ namespace UiAutomation.Tests.Tests.Basket;
 [Category("P0")]
 [Category(TestCategories.ProductionTestClient)]
 [Category(TestCategories.MutatesUserState)]
-public sealed class BasketSmokeTests : AuthenticatedUiTestBase
+public sealed class BasketSmokeTests : BasketMutatingTestBase
 {
-    private const string ProductCard = "5614799817";
-    private BasketPage _basket = null!;
-    private IReadOnlyDictionary<string, bool> _originalSelectionStates =
-        new Dictionary<string, bool>();
-
-    [SetUp]
-    public void OpenCleanBasket()
-    {
-        _basket = new BasketPage(Driver, Timeout);
-        _basket.Open(Settings.BaseUrl);
-        _basket.RemoveProduct(ProductCard);
-        _originalSelectionStates = _basket.SelectionStatesByCard;
-    }
-
-    [TearDown]
-    public void RemoveReferenceProduct()
-    {
-        try
-        {
-            _basket.Open(Settings.BaseUrl);
-            _basket.RemoveProduct(ProductCard);
-            _basket.RestoreSelectionStates(_originalSelectionStates);
-        }
-        catch when (TestContext.CurrentContext.Result.Outcome.Status == NUnit.Framework.Interfaces.TestStatus.Failed)
-        {
-            TestContext.Progress.WriteLine($"Cleanup could not remove basket product {ProductCard}.");
-        }
-    }
-
     /// <summary>
     /// Ручной сценарий: ввести номер карточки товара в поле добавления корзины,
     /// подтвердить ввод и повторить добавление той же карточки.
@@ -51,9 +22,10 @@ public sealed class BasketSmokeTests : AuthenticatedUiTestBase
     [Property("TestCaseId", "BASKET-002")]
     public void ProductCanBeAddedByCardWithoutDuplicate()
     {
-        _basket.AddProduct(ProductCard);
+        var card = BasketTestCards.AddProduct;
+        AddTrackedProduct(card);
 
-        Assert.That(_basket.ProductCards.Count(card => card == ProductCard), Is.EqualTo(1));
+        Assert.That(Basket.ProductCards.Count(item => item == card), Is.EqualTo(1));
     }
 
     /// <summary>
@@ -65,16 +37,17 @@ public sealed class BasketSmokeTests : AuthenticatedUiTestBase
     [Property("TestCaseId", "BASKET-003")]
     public void ProductRowShowsRequiredData()
     {
-        _basket.AddProduct(ProductCard);
-        var product = _basket.ProductDetails(ProductCard);
-        var stocks = _basket.WarehouseStocks(ProductCard);
+        var card = BasketTestCards.ProductDetails;
+        AddTrackedProduct(card);
+        var product = Basket.ProductDetails(card);
+        var stocks = Basket.WarehouseStocks(card);
 
         Assert.Multiple(() =>
         {
-            Assert.That(product.Card, Is.EqualTo(ProductCard));
+            Assert.That(product.Card, Is.EqualTo(card));
             Assert.That(product.Code, Is.Not.Empty);
             Assert.That(product.Text, Does.Contain("Фільтр оливний"));
-            Assert.That(product.Text, Does.Contain("Дорож"));
+            Assert.That(product.Text, Does.Contain("KNECHT").IgnoreCase);
             Assert.That(product.Price, Is.GreaterThan(0));
             Assert.That(product.Quantity, Is.EqualTo(1));
             Assert.That(stocks.Values, Is.Not.Empty);
@@ -91,8 +64,9 @@ public sealed class BasketSmokeTests : AuthenticatedUiTestBase
     [Property("TestCaseId", "BASKET-004")]
     public void WarehouseHeadersMatchStockValuesByIndex()
     {
-        _basket.AddProduct(ProductCard);
-        var stocks = _basket.WarehouseStocks(ProductCard);
+        var card = BasketTestCards.WarehouseStocks;
+        AddTrackedProduct(card);
+        var stocks = Basket.WarehouseStocks(card);
 
         Assert.Multiple(() =>
         {
@@ -113,18 +87,19 @@ public sealed class BasketSmokeTests : AuthenticatedUiTestBase
     [Property("TestCaseId", "BASKET-005")]
     public void QuantityControlsRecalculateSelectedTotalAndRejectInvalidValue()
     {
-        _basket.AddProduct(ProductCard);
-        _basket.SelectOnlyProduct(ProductCard);
-        var initialTotal = _basket.SelectedTotal;
+        var card = BasketTestCards.Quantity;
+        AddTrackedProduct(card);
+        Basket.SelectOnlyProduct(card);
+        var initialTotal = Basket.SelectedTotal;
 
-        _basket.IncreaseQuantity(ProductCard);
-        Assert.That(_basket.SelectedTotal, Is.GreaterThan(initialTotal));
+        Basket.IncreaseQuantity(card);
+        Assert.That(Basket.SelectedTotal, Is.GreaterThan(initialTotal));
 
-        _basket.DecreaseQuantity(ProductCard);
-        Assert.That(_basket.SelectedTotal, Is.EqualTo(initialTotal));
+        Basket.DecreaseQuantity(card);
+        Assert.That(Basket.SelectedTotal, Is.EqualTo(initialTotal));
 
-        _basket.SetQuantity(ProductCard, "0");
-        Assert.That(_basket.ProductQuantity(ProductCard), Is.GreaterThanOrEqualTo(1));
+        Basket.SetQuantity(card, "0");
+        Assert.That(Basket.ProductQuantity(card), Is.GreaterThanOrEqualTo(1));
     }
 
     /// <summary>
@@ -136,12 +111,13 @@ public sealed class BasketSmokeTests : AuthenticatedUiTestBase
     [Property("TestCaseId", "BASKET-006")]
     public void SelectedTotalIncludesOnlyCheckedProduct()
     {
-        _basket.AddProduct(ProductCard);
-        var product = _basket.ProductDetails(ProductCard);
+        var card = BasketTestCards.Selection;
+        AddTrackedProduct(card);
+        var product = Basket.ProductDetails(card);
 
-        _basket.SelectOnlyProduct(ProductCard);
+        Basket.SelectOnlyProduct(card);
 
-        Assert.That(_basket.SelectedTotal, Is.EqualTo(product.Price * product.Quantity));
+        Assert.That(Basket.SelectedTotal, Is.EqualTo(product.Price * product.Quantity));
     }
 
     /// <summary>
@@ -153,13 +129,13 @@ public sealed class BasketSmokeTests : AuthenticatedUiTestBase
     [Property("TestCaseId", "BASKET-007")]
     public void SelectAllCheckboxControlsEligibleBasketRows()
     {
-        _basket.AddProduct(ProductCard);
+        AddTrackedProduct(BasketTestCards.SelectAll);
 
-        _basket.SetSelectAll(false);
-        Assert.That(_basket.SelectionStates, Has.All.False);
+        Basket.SetSelectAll(false);
+        Assert.That(Basket.SelectionStates, Has.All.False);
 
-        _basket.SetSelectAll(true);
-        Assert.That(_basket.SelectionStates, Has.Some.True);
+        Basket.SetSelectAll(true);
+        Assert.That(Basket.SelectionStates, Has.Some.True);
     }
 
     /// <summary>
@@ -170,15 +146,16 @@ public sealed class BasketSmokeTests : AuthenticatedUiTestBase
     [Property("TestCaseId", "BASKET-008")]
     public void RemovingProductDoesNotRemoveOtherRows()
     {
-        var otherCards = _basket.ProductCards.ToArray();
-        _basket.AddProduct(ProductCard);
+        var card = BasketTestCards.Removal;
+        var otherCards = Basket.ProductCards.ToArray();
+        AddTrackedProduct(card);
 
-        _basket.RemoveProduct(ProductCard);
+        Basket.RemoveProduct(card);
 
         Assert.Multiple(() =>
         {
-            Assert.That(_basket.HasProduct(ProductCard), Is.False);
-            Assert.That(_basket.ProductCards, Is.EqualTo(otherCards));
+            Assert.That(Basket.HasProduct(card), Is.False);
+            Assert.That(Basket.ProductCards, Is.EqualTo(otherCards));
         });
     }
 }

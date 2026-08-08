@@ -7,7 +7,7 @@ namespace UiAutomation.Tests.Pages;
 
 public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
 {
-    private static readonly TimeSpan BasketSettleTime = TimeSpan.FromMilliseconds(300);
+    private static readonly TimeSpan BasketSettleTime = TimeSpan.FromMilliseconds(1500);
     private static readonly By BlockingOverlayBy = By.CssSelector("div.block-ui-overlay");
     private static readonly By AddPositionBy = By.Id("inputBasketAddCardNumber");
     private static readonly By AddPositionConfirmBy = By.Id("buttonBasketGo");
@@ -124,35 +124,59 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
             "//*[contains(normalize-space(.), 'Загальна сума обраних в кошику')]/following::strong[1]"))
         .First(element => element.Displayed)).Text);
 
-    public IReadOnlyList<bool> SelectionStates => SelectionStatesByCard.Values.ToArray();
+    public IReadOnlyList<bool> SelectionStates => SelectionStatesByCard
+        .Select(item => item.Selected)
+        .ToArray();
 
-    public IReadOnlyDictionary<string, bool> SelectionStatesByCard => SelectableRows()
-        .Select(item => (Card: ProductCardFromRow(item.Row), item.Checkbox.Selected))
-        .Where(item => item.Card.Length > 0)
-        .ToDictionary(item => item.Card, item => item.Selected, StringComparer.Ordinal);
+    public IReadOnlyList<BasketSelectionState> SelectionStatesByCard
+    {
+        get
+        {
+            var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
+            return SelectableRows()
+                .Select(item =>
+                {
+                    var card = ProductCardFromRow(item.Row);
+                    occurrences.TryGetValue(card, out var occurrence);
+                    occurrences[card] = occurrence + 1;
+                    return new BasketSelectionState(card, occurrence, item.Checkbox.Selected);
+                })
+                .Where(item => item.Card.Length > 0)
+                .ToArray();
+        }
+    }
 
-    public void RestoreSelectionStates(IReadOnlyDictionary<string, bool> states)
+    public void RestoreSelectionStates(IReadOnlyList<BasketSelectionState> states)
     {
         WaitUntilStable();
-        var rowsByCard = SelectableRows()
-            .Select(item => (Card: ProductCardFromRow(item.Row), item.Row, item.Checkbox))
-            .Where(item => item.Card.Length > 0)
-            .ToDictionary(item => item.Card, item => (item.Row, item.Checkbox), StringComparer.Ordinal);
+        var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
+        var rowsByKey = SelectableRows()
+            .Select(item =>
+            {
+                var card = ProductCardFromRow(item.Row);
+                occurrences.TryGetValue(card, out var occurrence);
+                occurrences[card] = occurrence + 1;
+                return (Key: (card, occurrence), item.Row, item.Checkbox);
+            })
+            .Where(item => item.Key.card.Length > 0)
+            .ToDictionary(item => item.Key, item => (item.Row, item.Checkbox));
 
-        var missingCards = states.Keys.Where(card => !rowsByCard.ContainsKey(card)).ToArray();
-        if (missingCards.Length > 0)
+        var missingRows = states
+            .Where(state => !rowsByKey.ContainsKey((state.Card, state.Occurrence)))
+            .ToArray();
+        if (missingRows.Length > 0)
         {
             throw new InvalidOperationException(
                 $"Cannot restore basket selection because rows disappeared: " +
-                string.Join(", ", missingCards));
+                string.Join(", ", missingRows.Select(item => $"{item.Card}#{item.Occurrence + 1}")));
         }
 
-        foreach (var (card, expected) in states)
+        foreach (var state in states)
         {
-            var (row, checkbox) = rowsByCard[card];
-            if (checkbox.Selected == expected) continue;
+            var (row, checkbox) = rowsByKey[(state.Card, state.Occurrence)];
+            if (checkbox.Selected == state.Selected) continue;
             driver.ClickRobustly(row.FindElements(By.CssSelector("label")).First());
-            _wait.Until(_ => checkbox.IsStale() || checkbox.Selected == expected);
+            _wait.Until(_ => checkbox.IsStale() || checkbox.Selected == state.Selected);
         }
     }
 
@@ -182,7 +206,8 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
             throw new WebDriverTimeoutException(
                 $"Select all did not reach '{selected}'. Master: " +
                 $"{SelectAllControl().Selected}; rows: " +
-                string.Join(", ", states.Select(item => $"{item.Key}={item.Value}")),
+                string.Join(", ", states.Select(item =>
+                    $"{item.Card}#{item.Occurrence + 1}={item.Selected}")),
                 exception);
         }
     }
@@ -505,3 +530,8 @@ public sealed record BasketProductDetails(
     string Text,
     decimal Price,
     int Quantity);
+
+public sealed record BasketSelectionState(
+    string Card,
+    int Occurrence,
+    bool Selected);
