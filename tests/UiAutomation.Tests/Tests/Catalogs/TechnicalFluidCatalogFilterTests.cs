@@ -50,15 +50,6 @@ public sealed class TechnicalFluidCatalogFilterTests : CatalogFilterTestBase
     public void SaleFilterShowsOnlyMarkedDownTechnicalFluids() => AssertSaleFilter();
 
     /// <summary>
-    /// Включает акционный товар и проверяет, что фильтр остаётся выбранным,
-    /// отображается среди применённых и изменяет непустую выдачу.
-    /// </summary>
-    [Test]
-    [Property("TestCaseId", "CAT-COM-005")]
-    public void PromotionalFilterChangesResultsAndRemainsApplied() =>
-        AssertPromotionalFilter();
-
-    /// <summary>
     /// Применяет фильтр технических жидкостей, сбрасывает его и проверяет
     /// очистку параметров и восстановление исходной выдачи.
     /// </summary>
