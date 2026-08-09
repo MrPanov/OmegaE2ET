@@ -95,6 +95,8 @@ public sealed class BasketAddProductTests : AuthenticatedUiTestFixture
         {
             Assert.That(_basket.ProductRowCount(Card), Is.EqualTo(1));
             Assert.That(_basket.ProductQuantity(Card), Is.EqualTo(3));
+            Assert.That(_basket.SectionOf(Card), Is.EqualTo(BasketPage.StockSection),
+                "Складской товар оказался не в том разделе корзины.");
         });
     }
 

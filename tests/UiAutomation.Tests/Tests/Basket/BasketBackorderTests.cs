@@ -74,6 +74,8 @@ public sealed class BasketBackorderTests : AuthenticatedUiTestFixture
             Assert.That(_basket.HasProduct(ExpectedCard), Is.True,
                 "Позиция под заказ не появилась в корзине.");
             Assert.That(_basket.ProductRowCount(ExpectedCard), Is.EqualTo(1));
+            Assert.That(_basket.SectionOf(ExpectedCard), Is.EqualTo(BasketPage.BackorderSection),
+                "Позиция под заказ оказалась не в том разделе корзины.");
         });
     }
 

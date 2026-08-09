@@ -12,6 +12,12 @@ namespace UiAutomation.Tests.Pages;
 /// </summary>
 public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
 {
+    /// <summary>Раздел корзины с позициями, доступными на складе.</summary>
+    public const string StockSection = "Товари зі складу";
+
+    /// <summary>Раздел корзины с позициями под заказ.</summary>
+    public const string BackorderSection = "Товари під замовлення";
+
     private static readonly By AddCardInputBy = By.Id("inputBasketAddCardNumber");
     private static readonly By AddCardConfirmBy = By.Id("buttonBasketGo");
     private static readonly By BasketRowsBy = By.CssSelector(".item-basket");
@@ -29,6 +35,11 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     // Сама сумма лежит не в узле с подписью, а в ближайшем следующем <strong>.
     private static readonly By SelectedTotalBy = By.XPath(
         "//*[contains(normalize-space(.), 'Загальна сума обраних в кошику')]/following::strong[1]");
+    // Ищется от строки товара вверх по документу: ось preceding нумерует
+    // элементы в обратном порядке, поэтому [1] — ближайший заголовок сверху.
+    private static readonly By SectionHeadingBy = By.XPath(
+        $"./preceding::*[normalize-space(text())='{StockSection}'" +
+        $" or normalize-space(text())='{BackorderSection}'][1]");
     private static readonly By HeaderCartBy = By.Id("navbarBasket");
     private static readonly By InvoiceJournalBy = By.XPath(
         "//a[contains(normalize-space(.), 'Журнал рахунків')]");
@@ -109,6 +120,20 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     }
 
     public bool HasProduct(string cardNumber) => ProductRow(cardNumber) is not null;
+
+    /// <summary>
+    /// Раздел корзины, в котором отображается позиция. Обе таблицы лежат в одном
+    /// контейнере и различаются только заголовком перед строками, поэтому раздел
+    /// определяется ближайшим предшествующим заголовком, а не предком.
+    /// </summary>
+    public string SectionOf(string cardNumber)
+    {
+        var heading = RequiredProductRow(cardNumber).FindElements(SectionHeadingBy).FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                $"Не удалось определить раздел корзины для позиции '{cardNumber}'.");
+
+        return UiText.NormalizeWhitespace(heading.Text);
+    }
 
     /// <summary>Количество в строке товара.</summary>
     public int ProductQuantity(string cardNumber) => ParseInt(
