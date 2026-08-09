@@ -16,6 +16,9 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     private static readonly By ProductCardLinkBy = By.CssSelector(".basketCard a");
     private static readonly By RemoveButtonBy = By.CssSelector("a.basketDel");
     private static readonly By ClearBasketBy = By.XPath("//a[contains(@ng-click,'clearBasket')]");
+    private static readonly By HeaderCartBy = By.Id("navbarBasket");
+    private static readonly By InvoiceJournalBy = By.XPath(
+        "//a[contains(normalize-space(.), 'Журнал рахунків')]");
     private static readonly By BlockingOverlayBy = By.CssSelector("div.block-ui-overlay");
 
     private static readonly TimeSpan ContentSettleTime = TimeSpan.FromMilliseconds(1500);
@@ -33,9 +36,27 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
         .Where(text => text.Length > 0)
         .ToArray();
 
+    /// <summary>Виден ли переход в журнал счетов — признак полностью отрисованной корзины.</summary>
+    public bool IsInvoiceJournalVisible => driver.IsVisible(InvoiceJournalBy);
+
+    /// <summary>
+    /// Открывает корзину прямой ссылкой. Так делают все сценарии, кроме BASKET-001:
+    /// им важно состояние корзины, а не способ, которым в неё попали.
+    /// </summary>
     public void Open(string baseUrl)
     {
         driver.Navigate().GoToUrl(new Uri(new Uri(baseUrl), "#/app/basket"));
+        _wait.Until(_ => IsLoaded);
+        WaitUntilContentSettled();
+    }
+
+    /// <summary>
+    /// Открывает корзину кликом по иконке тележки в шапке. Проверяет сам маршрут
+    /// перехода, поэтому используется только в BASKET-001.
+    /// </summary>
+    public void OpenFromHeader()
+    {
+        ClickWhenReady(HeaderCartBy);
         _wait.Until(_ => IsLoaded);
         WaitUntilContentSettled();
     }
