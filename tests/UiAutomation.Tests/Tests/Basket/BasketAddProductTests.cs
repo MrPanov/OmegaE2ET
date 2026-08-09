@@ -13,6 +13,10 @@ namespace UiAutomation.Tests.Tests.Basket;
 [Category(TestCategories.MutatesUserState)]
 public sealed class BasketAddProductTests : AuthenticatedUiTestFixture
 {
+    /// <summary>Карточка и каталожный код одного и того же товара.</summary>
+    private const string Card = "4610495";
+    private const string CatalogCode = "OC90";
+
     private BasketPage _basket = null!;
     private string? _addedCard;
 
@@ -46,6 +50,71 @@ public sealed class BasketAddProductTests : AuthenticatedUiTestFixture
         {
             Assert.That(_basket.HasProduct(cardNumber), Is.True);
             Assert.That(_basket.ProductRowCount(cardNumber), Is.EqualTo(1));
+        });
+    }
+
+    /// <summary>
+    /// Ручной сценарий: добавить товар по номеру карточки, затем ввести каталожный код
+    /// того же товара и подтвердить снова.
+    /// Ожидаемый результат: вторая строка не создаётся, количество в существующей растёт.
+    /// </summary>
+    [Test]
+    [Property("TestCaseId", "BASKET-003")]
+    public void CatalogCodeIncrementsExistingRowInsteadOfCreatingSecond()
+    {
+        _basket.RemoveProduct(Card);
+        var rowsBefore = _basket.ProductCards.Count;
+
+        _addedCard = Card;
+        _basket.AddProduct(Card);
+        _basket.AddByCode(CatalogCode, Card, expectedQuantity: 2);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_basket.ProductRowCount(Card), Is.EqualTo(1), "Появился дубль строки.");
+            Assert.That(_basket.ProductQuantity(Card), Is.EqualTo(2));
+            Assert.That(_basket.ProductCards, Has.Count.EqualTo(rowsBefore + 1));
+        });
+    }
+
+    /// <summary>
+    /// Ручной сценарий: ввести карточку, выставить счётчик панели добавления в 3
+    /// и подтвердить.
+    /// Ожидаемый результат: позиция добавлена сразу с количеством 3, а не с 1.
+    /// </summary>
+    [Test]
+    [Property("TestCaseId", "BASKET-004")]
+    public void ProductIsAddedWithQuantityChosenBeforeConfirmation()
+    {
+        _basket.RemoveProduct(Card);
+
+        _addedCard = Card;
+        _basket.AddProduct(Card, quantity: 3);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_basket.ProductRowCount(Card), Is.EqualTo(1));
+            Assert.That(_basket.ProductQuantity(Card), Is.EqualTo(3));
+        });
+    }
+
+    /// <summary>
+    /// Ручной сценарий: добавить товар и осмотреть флажок в его строке.
+    /// Ожидаемый результат: позиция отмечена автоматически, отдельный клик не нужен.
+    /// </summary>
+    [Test]
+    [Property("TestCaseId", "BASKET-005")]
+    public void AddedProductIsSelectedAutomatically()
+    {
+        _basket.RemoveProduct(Card);
+
+        _addedCard = Card;
+        _basket.AddProduct(Card);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_basket.IsProductSelected(Card), Is.True);
+            Assert.That(_basket.SelectedTotal, Is.GreaterThan(0));
         });
     }
 

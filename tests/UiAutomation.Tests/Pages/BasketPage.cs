@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Support.UI;
 using UiAutomation.Tests.Infrastructure;
@@ -16,6 +18,17 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     private static readonly By ProductCardLinkBy = By.CssSelector(".basketCard a");
     private static readonly By RemoveButtonBy = By.CssSelector("a.basketDel");
     private static readonly By ClearBasketBy = By.XPath("//a[contains(@ng-click,'clearBasket')]");
+    private static readonly By AddQuantityInputBy = By.XPath(
+        "//*[button[contains(@class,'claim-plus-btn')]]//input[@type='number']");
+    private static readonly By AddQuantityPlusBy = By.CssSelector("button.claim-plus-btn");
+    private static readonly By AddQuantityMinusBy = By.CssSelector("button.claim-minus-btn");
+    private static readonly By RowQuantityInputBy = By.CssSelector("input[type='number']");
+    private static readonly By RowCheckboxBy = By.CssSelector("input[type='checkbox']");
+    private static readonly By SelectAllLabelBy = By.XPath(
+        "//label[contains(normalize-space(.), 'Вибрати всі')]");
+    // Сама сумма лежит не в узле с подписью, а в ближайшем следующем <strong>.
+    private static readonly By SelectedTotalBy = By.XPath(
+        "//*[contains(normalize-space(.), 'Загальна сума обраних в кошику')]/following::strong[1]");
     private static readonly By HeaderCartBy = By.Id("navbarBasket");
     private static readonly By InvoiceJournalBy = By.XPath(
         "//a[contains(normalize-space(.), 'Журнал рахунків')]");
@@ -72,19 +85,83 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
         WaitUntilContentSettled();
     }
 
-    /// <summary>Вводит номер карточки в поле добавления и ждёт появления позиции в корзине.</summary>
-    public void AddProduct(string cardNumber)
+    /// <summary>
+    /// Вводит номер карточки в поле добавления и ждёт появления позиции в корзине.
+    /// Количество задаётся счётчиком до подтверждения — после него счётчик уже не влияет.
+    /// </summary>
+    public void AddProduct(string cardNumber, int quantity = 1)
     {
-        var input = _wait.Until(_ => VisibleElement(AddCardInputBy));
-        input.Clear();
-        input.SendKeys(cardNumber);
-        ClickWhenReady(AddCardConfirmBy);
-
+        SubmitAddForm(cardNumber, quantity);
         _wait.Until(_ => HasProduct(cardNumber));
         WaitUntilIdle();
     }
 
+    /// <summary>
+    /// Добавляет товар по каталожному коду. Код и номер карточки — разные
+    /// идентификаторы одного товара, поэтому строку ждём по карточке,
+    /// а завершение операции — по ожидаемому количеству в ней.
+    /// </summary>
+    public void AddByCode(string catalogCode, string expectedCard, int expectedQuantity, int quantity = 1)
+    {
+        SubmitAddForm(catalogCode, quantity);
+        _wait.Until(_ => HasProduct(expectedCard) && ProductQuantity(expectedCard) == expectedQuantity);
+        WaitUntilIdle();
+    }
+
     public bool HasProduct(string cardNumber) => ProductRow(cardNumber) is not null;
+
+    /// <summary>Количество в строке товара.</summary>
+    public int ProductQuantity(string cardNumber) => ParseInt(
+        RequiredProductRow(cardNumber).FindElement(RowQuantityInputBy).GetAttribute("value"));
+
+    /// <summary>Отмечена ли позиция флажком. Добавленный товар отмечается автоматически.</summary>
+    public bool IsProductSelected(string cardNumber) =>
+        RequiredProductRow(cardNumber).FindElement(RowCheckboxBy).Selected;
+
+    /// <summary>Состояния флажков всех видимых позиций.</summary>
+    public IReadOnlyList<bool> SelectionStates => driver.FindElements(BasketRowsBy)
+        .Where(IsVisibleRow)
+        .Select(row => row.FindElements(RowCheckboxBy).FirstOrDefault())
+        .Where(checkbox => checkbox is not null)
+        .Select(checkbox => checkbox!.Selected)
+        .ToArray();
+
+    /// <summary>Сумма по отмеченным позициям.</summary>
+    public decimal SelectedTotal => ParseAmount(
+        _wait.Until(_ => driver.FindElements(SelectedTotalBy)
+            .FirstOrDefault(element => element.Displayed))!.Text);
+
+    public void IncreaseQuantity(string cardNumber) =>
+        ChangeQuantity(cardNumber, "itemAmountIncrement", ProductQuantity(cardNumber) + 1);
+
+    public void DecreaseQuantity(string cardNumber, int? expected = null) =>
+        ChangeQuantity(cardNumber, "itemAmountDecrement", expected ?? ProductQuantity(cardNumber) - 1);
+
+    /// <summary>
+    /// Вводит количество вручную. Недопустимое значение приложение возвращает
+    /// к минимально допустимому, поэтому ожидание строится не на введённом тексте.
+    /// </summary>
+    public void SetQuantity(string cardNumber, string value)
+    {
+        var input = RequiredProductRow(cardNumber).FindElement(RowQuantityInputBy);
+        input.SendKeys(Keys.Control + "a");
+        input.SendKeys(value + Keys.Tab);
+        WaitUntilIdle();
+    }
+
+    /// <summary>Переключает флажок «Вибрати всі» и ждёт, пока состояние применится.</summary>
+    public void SetSelectAll(bool selected)
+    {
+        var label = _wait.Until(_ => driver.FindElements(SelectAllLabelBy)
+            .FirstOrDefault(element => element.Displayed));
+        if (label!.FindElement(RowCheckboxBy).Selected == selected) return;
+
+        driver.ClickRobustly(label);
+        _wait.Until(_ => driver.FindElements(SelectAllLabelBy)
+            .First(element => element.Displayed)
+            .FindElement(RowCheckboxBy).Selected == selected);
+        WaitUntilIdle();
+    }
 
     /// <summary>
     /// Кнопка очистки корзины отсутствует в разметке, пока корзина пуста,
@@ -116,6 +193,71 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
         _wait.Until(_ => !HasProduct(cardNumber));
         WaitUntilIdle();
     }
+
+    /// <summary>Заполняет панель добавления и подтверждает ввод.</summary>
+    private void SubmitAddForm(string identifier, int quantity)
+    {
+        var input = _wait.Until(_ => VisibleElement(AddCardInputBy));
+        input.Clear();
+        input.SendKeys(identifier);
+        SetAddQuantity(quantity);
+        ClickWhenReady(AddCardConfirmBy);
+    }
+
+    /// <summary>
+    /// Доводит счётчик панели добавления до нужного значения кнопками «−» и «+»,
+    /// как это делает пользователь.
+    /// </summary>
+    private void SetAddQuantity(int quantity)
+    {
+        if (quantity < 1) throw new ArgumentOutOfRangeException(nameof(quantity), quantity, "Минимум 1.");
+
+        for (var guard = 0; guard < 50; guard++)
+        {
+            var current = ParseInt(
+                _wait.Until(_ => VisibleElement(AddQuantityInputBy))!.GetAttribute("value"));
+            if (current == quantity) return;
+
+            ClickWhenReady(current < quantity ? AddQuantityPlusBy : AddQuantityMinusBy);
+            _wait.Until(_ => ParseInt(VisibleElement(AddQuantityInputBy)?.GetAttribute("value")) != current);
+        }
+
+        throw new InvalidOperationException($"Счётчик добавления не удалось привести к {quantity}.");
+    }
+
+    private void ChangeQuantity(string cardNumber, string handler, int expected)
+    {
+        var control = RequiredProductRow(cardNumber).FindElements(By.CssSelector("[ng-click]"))
+            .FirstOrDefault(element =>
+                (element.GetAttribute("ng-click") ?? string.Empty)
+                .Contains(handler, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"Контрол '{handler}' не найден для '{cardNumber}'.");
+
+        driver.ClickRobustly(control);
+        _wait.Until(_ => ProductQuantity(cardNumber) == expected);
+        WaitUntilIdle();
+    }
+
+    private static int ParseInt(string? value) =>
+        int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : 0;
+
+    /// <summary>Достаёт денежную сумму из текста вида «... в кошику: 159.06 грн.».</summary>
+    private static decimal ParseAmount(string text)
+    {
+        var match = Regex.Match(UiText.NormalizeWhitespace(text), @"([\d\s ]+[.,]\d{2})");
+        if (!match.Success) return 0;
+
+        var normalized = match.Groups[1].Value
+            .Replace(" ", string.Empty)
+            .Replace(" ", string.Empty)
+            .Replace(',', '.');
+        return decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount)
+            ? amount
+            : 0;
+    }
+
+    private IWebElement RequiredProductRow(string cardNumber) => ProductRow(cardNumber)
+        ?? throw new InvalidOperationException($"Позиция '{cardNumber}' отсутствует в корзине.");
 
     private IWebElement? ProductRow(string cardNumber) => driver.FindElements(BasketRowsBy)
         .FirstOrDefault(row => IsVisibleRow(row) && RowBelongsToCard(row, cardNumber));
