@@ -3,6 +3,9 @@
   <RunConfiguration>
     <EnvironmentVariables>
       <OMEGA_ENVIRONMENT>Test</OMEGA_ENVIRONMENT>
+      <!-- Сервер под нагрузкой отвечает дольше 20 секунд: логин и загрузка
+           корзины упирались в дефолтное ожидание и давали ложные падения. -->
+      <EXPLICIT_WAIT_SECONDS>40</EXPLICIT_WAIT_SECONDS>
     </EnvironmentVariables>
   </RunConfiguration>
   <TestRunParameters>

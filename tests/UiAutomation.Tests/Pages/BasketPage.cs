@@ -1,233 +1,140 @@
-using System.Globalization;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Support.UI;
 using UiAutomation.Tests.Infrastructure;
 
 namespace UiAutomation.Tests.Pages;
 
+/// <summary>
+/// Корзина: добавление товара по номеру карточки и проверка состава корзины.
+/// Поле ввода одно и то же для любого товара, различаются только номера карточек.
+/// </summary>
 public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
 {
-    private static readonly TimeSpan BasketSettleTime = TimeSpan.FromMilliseconds(1500);
-    private static readonly By BlockingOverlayBy = By.CssSelector("div.block-ui-overlay");
-    private static readonly By AddPositionBy = By.Id("inputBasketAddCardNumber");
-    private static readonly By AddPositionConfirmBy = By.Id("buttonBasketGo");
+    private static readonly By AddCardInputBy = By.Id("inputBasketAddCardNumber");
+    private static readonly By AddCardConfirmBy = By.Id("buttonBasketGo");
     private static readonly By BasketRowsBy = By.CssSelector(".item-basket");
-    private static readonly By RowCheckboxLabelBy = By.CssSelector("label:has(input[type='checkbox'])");
-    private static readonly By ReserveButtonBy = By.Id("buttonBasketReservationInvoice");
-    private static readonly By WarehouseDialogBy = By.XPath(
-        "//*[@role='dialog'][.//*[contains(normalize-space(.), 'Виберіть склад')]]");
-    private static readonly By WarehouseLabelsBy = By.CssSelector("label:has(input[name='warehouse'])");
-    private static readonly By ConfirmWarehouseBy = By.XPath(
-        "//*[@role='dialog']//button[normalize-space(.)='Вибрати']");
-    private static readonly By InvoiceCreatedToastBy = By.XPath(
-        "//*[contains(normalize-space(.), 'Створено рахунок')]");
-    private static readonly By ActiveInvoiceFormBy = By.XPath(
-        "//form[.//*[contains(normalize-space(.), 'Деталі рахунку')]]");
+    private static readonly By ProductCardLinkBy = By.CssSelector(".basketCard a");
+    private static readonly By RemoveButtonBy = By.CssSelector("a.basketDel");
+    private static readonly By ClearBasketBy = By.XPath("//a[contains(@ng-click,'clearBasket')]");
+    private static readonly By BlockingOverlayBy = By.CssSelector("div.block-ui-overlay");
+
+    private static readonly TimeSpan ContentSettleTime = TimeSpan.FromMilliseconds(1500);
 
     private readonly WebDriverWait _wait = new(driver, waitTimeout);
 
-    public bool IsLoaded => driver.IsVisible(AddPositionBy);
+    /// <summary>Признак того, что корзина отрисована и готова принимать ввод.</summary>
+    public bool IsLoaded => driver.IsVisible(AddCardInputBy);
 
-    public bool IsInvoiceJournalVisible => driver.FindElements(By.XPath(
-            "//a[contains(normalize-space(.), 'Журнал рахунків')]") )
-        .Any(element => element.Displayed);
-
-    public IReadOnlyList<string> ProductCards => driver.FindElements(By.CssSelector(".item-basket .basketCard a"))
-        .Where(element => element.Displayed)
-        .Select(element => UiText.NormalizeWhitespace(element.Text))
+    /// <summary>Номера карточек всех видимых позиций корзины в порядке отображения.</summary>
+    public IReadOnlyList<string> ProductCards => driver.FindElements(BasketRowsBy)
+        .Where(IsVisibleRow)
+        .SelectMany(row => row.FindElements(ProductCardLinkBy))
+        .Select(link => UiText.NormalizeWhitespace(link.Text))
         .Where(text => text.Length > 0)
         .ToArray();
 
     public void Open(string baseUrl)
     {
         driver.Navigate().GoToUrl(new Uri(new Uri(baseUrl), "#/app/basket"));
-        _wait.Until(d => d.FindElements(AddPositionBy)
-            .Any(element => element.Displayed && element.Enabled));
-        WaitUntilStable();
+        _wait.Until(_ => IsLoaded);
+        WaitUntilContentSettled();
     }
 
+    /// <summary>
+    /// Перезагружает страницу целиком. Переход по тому же хешу перезагрузки не даёт,
+    /// поэтому состояние, оставшееся после анимаций Angular, снимается только так.
+    /// </summary>
+    public void Reload()
+    {
+        driver.Navigate().Refresh();
+        _wait.Until(_ => IsLoaded);
+        WaitUntilContentSettled();
+    }
+
+    /// <summary>Вводит номер карточки в поле добавления и ждёт появления позиции в корзине.</summary>
     public void AddProduct(string cardNumber)
     {
-        var input = _wait.Until(d => d.FindElements(AddPositionBy)
-            .FirstOrDefault(element => element.Displayed && element.Enabled));
+        var input = _wait.Until(_ => VisibleElement(AddCardInputBy));
         input.Clear();
         input.SendKeys(cardNumber);
-        ClickWhenReady(AddPositionConfirmBy);
+        ClickWhenReady(AddCardConfirmBy);
 
-        _wait.Until(_ => ProductRow(cardNumber) is not null);
-        WaitUntilStable();
+        _wait.Until(_ => HasProduct(cardNumber));
+        WaitUntilIdle();
     }
 
     public bool HasProduct(string cardNumber) => ProductRow(cardNumber) is not null;
 
-    public BasketProductDetails ProductDetails(string cardNumber)
-    {
-        var row = RequiredProductRow(cardNumber);
-        var links = row.FindElements(By.CssSelector("a"))
-            .Where(element => element.Displayed)
-            .Select(element => UiText.NormalizeWhitespace(element.Text))
-            .Where(text => text.Length > 0)
-            .ToArray();
-        var quantity = row.FindElement(By.CssSelector("input[type='number']"));
-        var priceTexts = row.FindElements(By.CssSelector(".price, [class*='price'], ul"))
-            .Where(element => element.Displayed)
-            .Select(element => UiText.NormalizeWhitespace(element.Text));
+    /// <summary>
+    /// Кнопка очистки корзины отсутствует в разметке, пока корзина пуста,
+    /// поэтому её видимость — самостоятельный признак непустой корзины.
+    /// </summary>
+    public bool HasClearButton => driver.IsVisible(ClearBasketBy);
 
-        return new BasketProductDetails(
-            Card: cardNumber,
-            Code: links.First(text => !string.Equals(text, cardNumber, StringComparison.Ordinal) &&
-                                      !string.Equals(text, "Аналоги", StringComparison.OrdinalIgnoreCase)),
-            Text: UiText.NormalizeWhitespace(row.Text),
-            Price: priceTexts.Select(ParseAmount).First(amount => amount > 0),
-            Quantity: int.Parse(quantity.GetAttribute("value") ?? "0", CultureInfo.InvariantCulture));
+    /// <summary>Удаляет из корзины все позиции, включая чужие. Подтверждения нет.</summary>
+    public void ClearBasket()
+    {
+        ClickWhenReady(ClearBasketBy);
+        _wait.Until(_ => ProductCards.Count == 0);
+        WaitUntilIdle();
     }
 
-    public WarehouseStockTable WarehouseStocks(string cardNumber) => _wait.Until(_ =>
-    {
-        try
-        {
-            var (headerCells, valueCells) = StockCells(cardNumber);
-            var headers = headerCells.Select(ElementLabel).ToArray();
-            var values = valueCells
-                .Select(element => UiText.NormalizeWhitespace(element.Text))
-                .ToArray();
-            var warehouseCount = Math.Min(headers.Length, values.Length) - 1;
-            return warehouseCount > 0
-                ? new WarehouseStockTable(headers[..warehouseCount], values[..warehouseCount])
-                : null;
-        }
-        catch (StaleElementReferenceException)
-        {
-            return null;
-        }
-    });
+    /// <summary>Сколько строк корзины относится к указанной карточке.</summary>
+    public int ProductRowCount(string cardNumber) =>
+        ProductCards.Count(card => string.Equals(card, cardNumber, StringComparison.Ordinal));
 
-    public int ProductQuantity(string cardNumber) => int.Parse(
-        RequiredProductRow(cardNumber).FindElement(By.CssSelector("input[type='number']"))
-            .GetAttribute("value") ?? "0",
-        CultureInfo.InvariantCulture);
-
-    public void IncreaseQuantity(string cardNumber) =>
-        ChangeQuantity(cardNumber, "Increment", ProductQuantity(cardNumber) + 1);
-
-    public void DecreaseQuantity(string cardNumber) =>
-        ChangeQuantity(cardNumber, "Decrement", ProductQuantity(cardNumber) - 1);
-
-    public void SetQuantity(string cardNumber, string value)
-    {
-        var input = RequiredProductRow(cardNumber).FindElement(By.CssSelector("input[type='number']"));
-        input.SendKeys(Keys.Control + "a");
-        input.SendKeys(value + Keys.Tab);
-    }
-
-    public decimal SelectedTotal => ParseAmount(_wait.Until(d => d.FindElements(By.XPath(
-            "//*[contains(normalize-space(.), 'Загальна сума обраних в кошику')]/following::strong[1]"))
-        .First(element => element.Displayed)).Text);
-
-    public IReadOnlyList<bool> SelectionStates => SelectionStatesByCard
-        .Select(item => item.Selected)
-        .ToArray();
-
-    public IReadOnlyList<BasketSelectionState> SelectionStatesByCard
-    {
-        get
-        {
-            var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
-            return SelectableRows()
-                .Select(item =>
-                {
-                    var card = ProductCardFromRow(item.Row);
-                    occurrences.TryGetValue(card, out var occurrence);
-                    occurrences[card] = occurrence + 1;
-                    return new BasketSelectionState(card, occurrence, item.Checkbox.Selected);
-                })
-                .Where(item => item.Card.Length > 0)
-                .ToArray();
-        }
-    }
-
-    public void RestoreSelectionStates(IReadOnlyList<BasketSelectionState> states)
-    {
-        WaitUntilStable();
-        var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
-        var rowsByKey = SelectableRows()
-            .Select(item =>
-            {
-                var card = ProductCardFromRow(item.Row);
-                occurrences.TryGetValue(card, out var occurrence);
-                occurrences[card] = occurrence + 1;
-                return (Key: (card, occurrence), item.Row, item.Checkbox);
-            })
-            .Where(item => item.Key.card.Length > 0)
-            .ToDictionary(item => item.Key, item => (item.Row, item.Checkbox));
-
-        var missingRows = states
-            .Where(state => !rowsByKey.ContainsKey((state.Card, state.Occurrence)))
-            .ToArray();
-        if (missingRows.Length > 0)
-        {
-            throw new InvalidOperationException(
-                $"Cannot restore basket selection because rows disappeared: " +
-                string.Join(", ", missingRows.Select(item => $"{item.Card}#{item.Occurrence + 1}")));
-        }
-
-        foreach (var state in states)
-        {
-            var (row, checkbox) = rowsByKey[(state.Card, state.Occurrence)];
-            if (checkbox.Selected == state.Selected) continue;
-            driver.ClickRobustly(row.FindElements(By.CssSelector("label")).First());
-            _wait.Until(_ => checkbox.IsStale() || checkbox.Selected == state.Selected);
-        }
-    }
-
-    public void SetSelectAll(bool selected)
-    {
-        if (SelectionStates.Count > 0 && SelectionStates.All(state => state == selected)) return;
-
-        var (label, masterSelected) = SelectAllControl();
-        if (masterSelected == selected)
-        {
-            driver.ClickRobustly(label);
-            _wait.Until(_ => SelectAllControl().Selected != selected);
-            (label, _) = SelectAllControl();
-        }
-
-        driver.ClickRobustly(label);
-        try
-        {
-            _wait.Until(_ =>
-                SelectAllControl().Selected == selected &&
-                SelectionStates.Count > 0 &&
-                (selected ? SelectionStates.Any(state => state) : SelectionStates.All(state => !state)));
-        }
-        catch (WebDriverTimeoutException exception)
-        {
-            var states = SelectionStatesByCard;
-            throw new WebDriverTimeoutException(
-                $"Select all did not reach '{selected}'. Master: " +
-                $"{SelectAllControl().Selected}; rows: " +
-                string.Join(", ", states.Select(item =>
-                    $"{item.Card}#{item.Occurrence + 1}={item.Selected}")),
-                exception);
-        }
-    }
-
+    /// <summary>Удаляет позицию, если она есть. Отсутствие позиции не считается ошибкой.</summary>
     public void RemoveProduct(string cardNumber)
     {
         var row = ProductRow(cardNumber);
         if (row is null) return;
 
-        var action = row.FindElements(By.CssSelector("[ng-click]"))
-            .FirstOrDefault(element =>
-            {
-                var handler = element.GetAttribute("ng-click") ?? string.Empty;
-                return handler.Contains("remove", StringComparison.OrdinalIgnoreCase) ||
-                       handler.Contains("delete", StringComparison.OrdinalIgnoreCase);
-            });
-        action ??= row.FindElements(By.CssSelector(".fa-close, .fa-remove")).FirstOrDefault();
-        if (action is null) throw new InvalidOperationException($"Remove action is absent for '{cardNumber}'.");
+        driver.ClickRobustly(RemoveControl(row, cardNumber));
+        AcceptConfirmationIfPresent();
 
-        driver.ClickRobustly(action);
+        _wait.Until(_ => !HasProduct(cardNumber));
+        WaitUntilIdle();
+    }
+
+    private IWebElement? ProductRow(string cardNumber) => driver.FindElements(BasketRowsBy)
+        .FirstOrDefault(row => IsVisibleRow(row) && RowBelongsToCard(row, cardNumber));
+
+    private static bool RowBelongsToCard(IWebElement row, string cardNumber)
+    {
+        try
+        {
+            return row.FindElements(ProductCardLinkBy)
+                .Any(link => string.Equals(
+                    UiText.NormalizeWhitespace(link.Text),
+                    cardNumber,
+                    StringComparison.Ordinal));
+        }
+        catch (StaleElementReferenceException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsVisibleRow(IWebElement row)
+    {
+        try
+        {
+            return row.Displayed;
+        }
+        catch (StaleElementReferenceException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Кнопка удаления строки — `a.basketDel` с обработчиком `delete(item)`.</summary>
+    private static IWebElement RemoveControl(IWebElement row, string cardNumber) =>
+        row.FindElements(RemoveButtonBy).FirstOrDefault()
+        ?? throw new InvalidOperationException(
+            $"Кнопка удаления не найдена для карточки '{cardNumber}'.");
+
+    private void AcceptConfirmationIfPresent()
+    {
         try
         {
             driver.SwitchTo().Alert().Accept();
@@ -235,180 +142,52 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
         catch (NoAlertPresentException)
         {
         }
-
-        _wait.Until(_ => ProductRow(cardNumber) is null);
-        WaitUntilStable();
     }
 
-    public WarehouseChoice PositiveStockWarehouse(string cardNumber)
-    {
-        var (headers, values) = StockCells(cardNumber);
-        var warehouseCount = Math.Min(headers.Count, values.Count) - 1;
+    private IWebElement? VisibleElement(By by) => driver.FindElements(by)
+        .FirstOrDefault(element => element.Displayed && element.Enabled);
 
-        for (var index = 0; index < warehouseCount; index++)
+    private void ClickWhenReady(By by) => _wait.Until(_ =>
+    {
+        if (driver.IsVisible(BlockingOverlayBy)) return false;
+
+        var element = VisibleElement(by);
+        if (element is null) return false;
+
+        try
         {
-            var stockText = UiText.NormalizeWhitespace(values[index].Text);
-            if (IsPositiveStock(stockText))
-            {
-                return new WarehouseChoice(
-                    Index: index,
-                    ColumnName: UiText.NormalizeWhitespace(headers[index].Text),
-                    Stock: stockText);
-            }
+            driver.ClickRobustly(element);
+            return true;
         }
-
-        throw new InvalidOperationException(
-            $"Product '{cardNumber}' has no positive stock in the visible warehouse columns.");
-    }
-
-    public void SelectOnlyProduct(string cardNumber)
-    {
-        var rows = driver.FindElements(BasketRowsBy).Where(element => element.Displayed).ToArray();
-        foreach (var row in rows)
+        catch (StaleElementReferenceException)
         {
-            var checkbox = row.FindElements(By.CssSelector("input[type='checkbox']")).FirstOrDefault();
-            if (checkbox is null) continue;
-
-            var shouldBeSelected = ContainsExactText(row, cardNumber);
-            if (checkbox.Selected == shouldBeSelected) continue;
-
-            var label = row.FindElements(RowCheckboxLabelBy).First();
-            driver.ClickRobustly(label);
-            _wait.Until(_ => checkbox.IsStale() || checkbox.Selected == shouldBeSelected);
+            return false;
         }
+    });
 
-        _wait.Until(_ => SelectedProductCards().SequenceEqual([cardNumber]));
-    }
+    /// <summary>Ждёт, пока исчезнет блокирующий оверлей после запроса к серверу.</summary>
+    private void WaitUntilIdle() => _wait.Until(_ => !driver.IsVisible(BlockingOverlayBy));
 
-    public string ReserveFromWarehouse(WarehouseChoice warehouse)
-    {
-        ClickWhenReady(ReserveButtonBy);
-        var dialog = _wait.Until(d => d.FindElements(WarehouseDialogBy)
-            .FirstOrDefault(element => element.Displayed));
-        var warehouseLabels = dialog.FindElements(WarehouseLabelsBy)
-            .Where(element => element.Displayed)
-            .ToArray();
-        if (warehouse.Index >= warehouseLabels.Length)
-        {
-            throw new InvalidOperationException(
-                $"Warehouse column '{warehouse.ColumnName}' has no corresponding reserve option.");
-        }
-
-        var selectedWarehouse = UiText.NormalizeWhitespace(warehouseLabels[warehouse.Index].Text);
-        driver.ClickRobustly(warehouseLabels[warehouse.Index]);
-        ClickWhenReady(ConfirmWarehouseBy);
-
-        _wait.Until(d => d.IsVisible(InvoiceCreatedToastBy));
-        _wait.Until(d => d.FindElements(ActiveInvoiceFormBy).Any(element => element.Displayed));
-        return selectedWarehouse;
-    }
-
-    public IReadOnlyList<string> ActiveInvoiceProductCards()
-    {
-        var invoice = _wait.Until(d => d.FindElements(ActiveInvoiceFormBy)
-            .FirstOrDefault(element => element.Displayed));
-
-        return invoice.FindElements(By.CssSelector(".basketCard a, a"))
-            .Select(element => UiText.NormalizeWhitespace(element.Text))
-            .Where(text => text.All(char.IsDigit) && text.Length >= 6)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-    }
-
-    public bool ActiveInvoiceContainsWarehouse(string warehouse) =>
-        UiText.NormalizeWhitespace(_wait.Until(d => d.FindElements(ActiveInvoiceFormBy)
-            .First(element => element.Displayed)).Text)
-            .Contains(warehouse, StringComparison.OrdinalIgnoreCase);
-
-    private IWebElement? ProductRow(string cardNumber) =>
-        driver.FindElements(BasketRowsBy)
-            .FirstOrDefault(row =>
-            {
-                try
-                {
-                    return row.Displayed && ContainsExactText(row, cardNumber);
-                }
-                catch (StaleElementReferenceException)
-                {
-                    return false;
-                }
-            });
-
-    private IWebElement RequiredProductRow(string cardNumber) => ProductRow(cardNumber) ??
-        throw new InvalidOperationException($"Product '{cardNumber}' is absent from the basket.");
-
-    private IReadOnlyList<(IWebElement Row, IWebElement Checkbox)> SelectableRows() =>
-        driver.FindElements(BasketRowsBy)
-            .Where(row => row.Displayed)
-            .Select(row => (
-                Row: row,
-                Checkbox: row.FindElements(By.CssSelector("input[type='checkbox']"))
-                    .FirstOrDefault(element => element.Enabled)))
-            .Where(item => item.Checkbox is not null)
-            .Select(item => (item.Row, item.Checkbox!))
-            .ToArray();
-
-    private (IWebElement Label, bool Selected) SelectAllControl()
-    {
-        var label = _wait.Until(d => d.FindElements(By.XPath(
-                "//label[contains(normalize-space(.), 'Вибрати всі')]") )
-            .First(element => element.Displayed));
-        var checkbox = label.FindElement(By.CssSelector("input[type='checkbox']"));
-        return (label, checkbox.Selected);
-    }
-
-    private static string ProductCardFromRow(IWebElement row) => row
-        .FindElements(By.CssSelector("a"))
-        .Select(element => UiText.NormalizeWhitespace(element.Text))
-        .FirstOrDefault(text => text.Length >= 6 && text.All(char.IsDigit)) ?? string.Empty;
-
-    private static string ElementLabel(IWebElement element)
-    {
-        var ownValues = new[]
-        {
-            element.Text,
-            element.GetAttribute("title"),
-            element.GetAttribute("aria-label"),
-            element.GetAttribute("data-original-title"),
-            element.GetAttribute("textContent")
-        };
-        var ownLabel = ownValues
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => UiText.NormalizeWhitespace(value!))
-            .FirstOrDefault(value => value.Length > 0);
-        if (ownLabel is not null) return ownLabel;
-
-        return element.FindElements(By.CssSelector("[title], [aria-label], [data-original-title]"))
-            .SelectMany(child => new[]
-            {
-                child.GetAttribute("title"),
-                child.GetAttribute("aria-label"),
-                child.GetAttribute("data-original-title")
-            })
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => UiText.NormalizeWhitespace(value!))
-            .FirstOrDefault(value => value.Length > 0) ?? string.Empty;
-    }
-
-    private void WaitUntilStable()
+    /// <summary>
+    /// Ждёт, пока состав корзины перестанет меняться. Позиции подгружаются отдельным
+    /// запросом уже после того, как поле ввода отрисовано и оверлей снят, поэтому
+    /// чтение сразу после загрузки страницы возвращает пустой список.
+    /// </summary>
+    private void WaitUntilContentSettled()
     {
         string? previousSignature = null;
         DateTime? stableSince = null;
 
-        _wait.Until(d =>
+        _wait.Until(_ =>
         {
-            if (d.IsVisible(BlockingOverlayBy))
+            if (driver.IsVisible(BlockingOverlayBy))
             {
                 previousSignature = null;
                 stableSince = null;
                 return false;
             }
 
-            var signature = string.Join(
-                "|",
-                d.FindElements(BasketRowsBy)
-                    .Where(row => row.Displayed)
-                    .Select(row => UiText.NormalizeWhitespace(row.Text)));
+            var signature = string.Join("|", ProductCards);
             if (!string.Equals(signature, previousSignature, StringComparison.Ordinal))
             {
                 previousSignature = signature;
@@ -416,122 +195,7 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
                 return false;
             }
 
-            return stableSince is not null && DateTime.UtcNow - stableSince >= BasketSettleTime;
+            return stableSince is not null && DateTime.UtcNow - stableSince >= ContentSettleTime;
         });
-    }
-
-    private (IReadOnlyList<IWebElement> Headers, IReadOnlyList<IWebElement> Values) StockCells(
-        string cardNumber)
-    {
-        var row = RequiredProductRow(cardNumber);
-        var itemRows = row.FindElements(By.CssSelector("table tr"));
-        if (itemRows.Count == 0)
-        {
-            throw new InvalidOperationException($"Stock table is absent for product '{cardNumber}'.");
-        }
-
-        if (itemRows.Count >= 2)
-        {
-            var localHeaders = itemRows[0].FindElements(By.CssSelector("th,td"));
-            var localValues = itemRows[1].FindElements(By.CssSelector("th,td"));
-            if (localHeaders.Any(header => ElementLabel(header).Length > 0))
-            {
-                return (localHeaders, localValues);
-            }
-        }
-
-        var headerRow = driver.FindElements(By.CssSelector("table tr"))
-            .FirstOrDefault(candidate => candidate.Displayed &&
-                candidate.FindElements(By.CssSelector("th,td"))
-                    .Any(cell => UiText.NormalizeWhitespace(cell.Text) == "Всі скл."));
-        if (headerRow is null)
-        {
-            throw new InvalidOperationException("Warehouse header row is absent.");
-        }
-
-        return (
-            headerRow.FindElements(By.CssSelector("th,td")),
-            itemRows[^1].FindElements(By.CssSelector("th,td")));
-    }
-
-    private void ChangeQuantity(string cardNumber, string actionName, int expected)
-    {
-        var row = RequiredProductRow(cardNumber);
-        var action = row.FindElements(By.CssSelector("[ng-click]"))
-            .First(element => (element.GetAttribute("ng-click") ?? string.Empty)
-                .Contains(actionName, StringComparison.OrdinalIgnoreCase));
-        driver.ClickRobustly(action);
-        _wait.Until(_ => ProductQuantity(cardNumber) == expected);
-    }
-
-    private IReadOnlyList<string> SelectedProductCards() =>
-        driver.FindElements(BasketRowsBy)
-            .Where(row => row.Displayed && row.FindElements(By.CssSelector("input[type='checkbox']"))
-                .FirstOrDefault()?.Selected == true)
-            .SelectMany(row => row.FindElements(By.CssSelector(".basketCard a")))
-            .Select(element => UiText.NormalizeWhitespace(element.Text))
-            .Where(text => text.Length > 0)
-            .ToArray();
-
-    private void ClickWhenReady(By by)
-    {
-        _wait.Until(d =>
-        {
-            if (d.IsVisible(BlockingOverlayBy)) return false;
-            var element = d.FindElements(by)
-                .FirstOrDefault(candidate => candidate.Displayed && candidate.Enabled);
-            if (element is null) return false;
-
-            try
-            {
-                d.ClickRobustly(element);
-                return true;
-            }
-            catch (StaleElementReferenceException)
-            {
-                return false;
-            }
-        });
-    }
-
-    private static bool ContainsExactText(IWebElement root, string text) =>
-        root.FindElements(By.XPath($".//*[normalize-space(.)={XPathHelpers.Literal(text)}]"))
-            .Any(element => element.Displayed);
-
-    private static bool IsPositiveStock(string value)
-    {
-        var numeric = new string(value.Where(character => char.IsDigit(character) || character is '.' or ',').ToArray())
-            .Replace(',', '.');
-        return decimal.TryParse(numeric, NumberStyles.Number, CultureInfo.InvariantCulture, out var stock) &&
-               stock > 0;
-    }
-
-    private static decimal ParseAmount(string value)
-    {
-        var normalized = new string(value.Where(character =>
-                char.IsDigit(character) || character is '.' or ',' or '-').ToArray())
-            .Replace(" ", string.Empty)
-            .Replace(',', '.');
-        return decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount)
-            ? amount
-            : 0;
     }
 }
-
-public sealed record WarehouseChoice(int Index, string ColumnName, string Stock);
-
-public sealed record WarehouseStockTable(
-    IReadOnlyList<string> Headers,
-    IReadOnlyList<string> Values);
-
-public sealed record BasketProductDetails(
-    string Card,
-    string Code,
-    string Text,
-    decimal Price,
-    int Quantity);
-
-public sealed record BasketSelectionState(
-    string Card,
-    int Occurrence,
-    bool Selected);
