@@ -15,7 +15,10 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     private static readonly By BasketRowsBy = By.CssSelector(".item-basket");
     private static readonly By ProductCardLinkBy = By.CssSelector(".basketCard a");
     private static readonly By RemoveButtonBy = By.CssSelector("a.basketDel");
+    private static readonly By ClearBasketBy = By.XPath("//a[contains(@ng-click,'clearBasket')]");
     private static readonly By BlockingOverlayBy = By.CssSelector("div.block-ui-overlay");
+
+    private static readonly TimeSpan ContentSettleTime = TimeSpan.FromMilliseconds(1500);
 
     private readonly WebDriverWait _wait = new(driver, waitTimeout);
 
@@ -34,7 +37,18 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     {
         driver.Navigate().GoToUrl(new Uri(new Uri(baseUrl), "#/app/basket"));
         _wait.Until(_ => IsLoaded);
-        WaitUntilIdle();
+        WaitUntilContentSettled();
+    }
+
+    /// <summary>
+    /// Перезагружает страницу целиком. Переход по тому же хешу перезагрузки не даёт,
+    /// поэтому состояние, оставшееся после анимаций Angular, снимается только так.
+    /// </summary>
+    public void Reload()
+    {
+        driver.Navigate().Refresh();
+        _wait.Until(_ => IsLoaded);
+        WaitUntilContentSettled();
     }
 
     /// <summary>Вводит номер карточки в поле добавления и ждёт появления позиции в корзине.</summary>
@@ -50,6 +64,20 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     }
 
     public bool HasProduct(string cardNumber) => ProductRow(cardNumber) is not null;
+
+    /// <summary>
+    /// Кнопка очистки корзины отсутствует в разметке, пока корзина пуста,
+    /// поэтому её видимость — самостоятельный признак непустой корзины.
+    /// </summary>
+    public bool HasClearButton => driver.IsVisible(ClearBasketBy);
+
+    /// <summary>Удаляет из корзины все позиции, включая чужие. Подтверждения нет.</summary>
+    public void ClearBasket()
+    {
+        ClickWhenReady(ClearBasketBy);
+        _wait.Until(_ => ProductCards.Count == 0);
+        WaitUntilIdle();
+    }
 
     /// <summary>Сколько строк корзины относится к указанной карточке.</summary>
     public int ProductRowCount(string cardNumber) =>
@@ -139,4 +167,35 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
 
     /// <summary>Ждёт, пока исчезнет блокирующий оверлей после запроса к серверу.</summary>
     private void WaitUntilIdle() => _wait.Until(_ => !driver.IsVisible(BlockingOverlayBy));
+
+    /// <summary>
+    /// Ждёт, пока состав корзины перестанет меняться. Позиции подгружаются отдельным
+    /// запросом уже после того, как поле ввода отрисовано и оверлей снят, поэтому
+    /// чтение сразу после загрузки страницы возвращает пустой список.
+    /// </summary>
+    private void WaitUntilContentSettled()
+    {
+        string? previousSignature = null;
+        DateTime? stableSince = null;
+
+        _wait.Until(_ =>
+        {
+            if (driver.IsVisible(BlockingOverlayBy))
+            {
+                previousSignature = null;
+                stableSince = null;
+                return false;
+            }
+
+            var signature = string.Join("|", ProductCards);
+            if (!string.Equals(signature, previousSignature, StringComparison.Ordinal))
+            {
+                previousSignature = signature;
+                stableSince = DateTime.UtcNow;
+                return false;
+            }
+
+            return stableSince is not null && DateTime.UtcNow - stableSince >= ContentSettleTime;
+        });
+    }
 }

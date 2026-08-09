@@ -63,7 +63,9 @@ dotnet test --filter "TestCategory=P1"
 - `REQUIRE_AUTHENTICATION=false` локально и `true` в TeamCity
 - `BROWSER=chrome`
 - `HEADLESS=false` — локально браузер открывается в видимом режиме
-- `EXPLICIT_WAIT_SECONDS=20`
+- `EXPLICIT_WAIT_SECONDS=20`; профили из `runsettings/` поднимают его до `40`,
+  потому что при нескольких сессиях подряд логин и загрузка корзины не укладываются
+  в 20 секунд и дают ложные падения
 - `SEARCH_MIN_INTERVAL_SECONDS=5` для Test
 - `SEARCH_MIN_INTERVAL_SECONDS=10` для Production
 

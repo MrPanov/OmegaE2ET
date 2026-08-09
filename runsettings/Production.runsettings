@@ -4,6 +4,9 @@
     <EnvironmentVariables>
       <OMEGA_ENVIRONMENT>Production</OMEGA_ENVIRONMENT>
       <ALLOW_PRODUCTION_TESTS>true</ALLOW_PRODUCTION_TESTS>
+      <!-- См. Test.runsettings: дефолтных 20 секунд не хватает на логин
+           и загрузку корзины, когда сессии создаются подряд. -->
+      <EXPLICIT_WAIT_SECONDS>40</EXPLICIT_WAIT_SECONDS>
     </EnvironmentVariables>
   </RunConfiguration>
   <TestRunParameters>

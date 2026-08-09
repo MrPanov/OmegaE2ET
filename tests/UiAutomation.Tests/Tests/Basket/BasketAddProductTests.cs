@@ -11,16 +11,17 @@ namespace UiAutomation.Tests.Tests.Basket;
 [Category("P0")]
 [Category(TestCategories.ProductionTestClient)]
 [Category(TestCategories.MutatesUserState)]
-public sealed class BasketAddProductTests : AuthenticatedUiTestBase
+public sealed class BasketAddProductTests : AuthenticatedUiTestFixture
 {
     private BasketPage _basket = null!;
     private string? _addedCard;
+
+    protected override void OnAuthenticated() => _basket = new BasketPage(Driver, Timeout);
 
     [SetUp]
     public void OpenBasket()
     {
         _addedCard = null;
-        _basket = new BasketPage(Driver, Timeout);
         _basket.Open(Settings.BaseUrl);
     }
 
