@@ -11,22 +11,18 @@ namespace UiAutomation.Tests.Tests.Basket;
 [Category("P0")]
 [Category(TestCategories.ProductionTestClient)]
 [Category(TestCategories.MutatesUserState)]
-public sealed class BasketAddProductTests : AuthenticatedUiTestFixture
+public sealed class BasketAddProductTests : BasketTestBase
 {
     /// <summary>Карточка и каталожный код одного и того же товара.</summary>
     private const string Card = "4610495";
     private const string CatalogCode = "OC90";
 
-    private BasketPage _basket = null!;
     private string? _addedCard;
 
-    protected override void OnAuthenticated() => _basket = new BasketPage(Driver, Timeout);
-
-    [SetUp]
-    public void OpenBasket()
+    protected override void OnBasketReady()
     {
         _addedCard = null;
-        _basket.Open(Settings.BaseUrl);
+        base.OnBasketReady();
     }
 
     /// <summary>
@@ -41,15 +37,15 @@ public sealed class BasketAddProductTests : AuthenticatedUiTestFixture
     public void ProductAddedByCardAppearsInBasket(string cardNumber)
     {
         // Корзина живая: убираем возможные следы предыдущего прогона до проверки.
-        _basket.RemoveProduct(cardNumber);
+        Basket.RemoveProduct(cardNumber);
 
         _addedCard = cardNumber;
-        _basket.AddProduct(cardNumber);
+        Basket.AddProduct(cardNumber);
 
         Assert.Multiple(() =>
         {
-            Assert.That(_basket.HasProduct(cardNumber), Is.True);
-            Assert.That(_basket.ProductRowCount(cardNumber), Is.EqualTo(1));
+            Assert.That(Basket.HasProduct(cardNumber), Is.True);
+            Assert.That(Basket.ProductRowCount(cardNumber), Is.EqualTo(1));
         });
     }
 
@@ -62,18 +58,18 @@ public sealed class BasketAddProductTests : AuthenticatedUiTestFixture
     [Property("TestCaseId", "BASKET-003")]
     public void CatalogCodeIncrementsExistingRowInsteadOfCreatingSecond()
     {
-        _basket.RemoveProduct(Card);
-        var rowsBefore = _basket.ProductCards.Count;
+        Basket.RemoveProduct(Card);
+        var rowsBefore = Basket.ProductCards.Count;
 
         _addedCard = Card;
-        _basket.AddProduct(Card);
-        _basket.AddByCode(CatalogCode, Card, expectedQuantity: 2);
+        Basket.AddProduct(Card);
+        Basket.AddByCode(CatalogCode, Card, expectedQuantity: 2);
 
         Assert.Multiple(() =>
         {
-            Assert.That(_basket.ProductRowCount(Card), Is.EqualTo(1), "Появился дубль строки.");
-            Assert.That(_basket.ProductQuantity(Card), Is.EqualTo(2));
-            Assert.That(_basket.ProductCards, Has.Count.EqualTo(rowsBefore + 1));
+            Assert.That(Basket.ProductRowCount(Card), Is.EqualTo(1), "Появился дубль строки.");
+            Assert.That(Basket.ProductQuantity(Card), Is.EqualTo(2));
+            Assert.That(Basket.ProductCards, Has.Count.EqualTo(rowsBefore + 1));
         });
     }
 
@@ -86,16 +82,16 @@ public sealed class BasketAddProductTests : AuthenticatedUiTestFixture
     [Property("TestCaseId", "BASKET-004")]
     public void ProductIsAddedWithQuantityChosenBeforeConfirmation()
     {
-        _basket.RemoveProduct(Card);
+        Basket.RemoveProduct(Card);
 
         _addedCard = Card;
-        _basket.AddProduct(Card, quantity: 3);
+        Basket.AddProduct(Card, quantity: 3);
 
         Assert.Multiple(() =>
         {
-            Assert.That(_basket.ProductRowCount(Card), Is.EqualTo(1));
-            Assert.That(_basket.ProductQuantity(Card), Is.EqualTo(3));
-            Assert.That(_basket.SectionOf(Card), Is.EqualTo(BasketPage.StockSection),
+            Assert.That(Basket.ProductRowCount(Card), Is.EqualTo(1));
+            Assert.That(Basket.ProductQuantity(Card), Is.EqualTo(3));
+            Assert.That(Basket.SectionOf(Card), Is.EqualTo(BasketPage.StockSection),
                 "Складской товар оказался не в том разделе корзины.");
         });
     }
@@ -108,15 +104,15 @@ public sealed class BasketAddProductTests : AuthenticatedUiTestFixture
     [Property("TestCaseId", "BASKET-005")]
     public void AddedProductIsSelectedAutomatically()
     {
-        _basket.RemoveProduct(Card);
+        Basket.RemoveProduct(Card);
 
         _addedCard = Card;
-        _basket.AddProduct(Card);
+        Basket.AddProduct(Card);
 
         Assert.Multiple(() =>
         {
-            Assert.That(_basket.IsProductSelected(Card), Is.True);
-            Assert.That(_basket.SelectedTotal, Is.GreaterThan(0));
+            Assert.That(Basket.IsProductSelected(Card), Is.True);
+            Assert.That(Basket.SelectedTotal, Is.GreaterThan(0));
         });
     }
 
@@ -131,7 +127,7 @@ public sealed class BasketAddProductTests : AuthenticatedUiTestFixture
 
         try
         {
-            _basket.RemoveProduct(_addedCard);
+            Basket.RemoveProduct(_addedCard);
         }
         catch (Exception exception)
         {

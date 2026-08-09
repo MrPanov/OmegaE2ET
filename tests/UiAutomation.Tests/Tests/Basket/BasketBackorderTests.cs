@@ -16,7 +16,7 @@ namespace UiAutomation.Tests.Tests.Basket;
 [Category("P0")]
 [Category(TestCategories.ProductionTestClient)]
 [Category(TestCategories.MutatesUserState)]
-public sealed class BasketBackorderTests : AuthenticatedUiTestFixture
+public sealed class BasketBackorderTests : BasketTestBase
 {
     /// <summary>Товар без складского остатка: «Фільтр масляний (Вир-во MEYLE)».</summary>
     private const string ProductCode = "614 065 0004";
@@ -26,17 +26,16 @@ public sealed class BasketBackorderTests : AuthenticatedUiTestFixture
 
     private SearchResultsPage _search = null!;
     private ProductStockDialog _stock = null!;
-    private BasketPage _basket = null!;
     private bool _added;
 
-    protected override void OnAuthenticated()
+    protected override void OnBasketReady()
     {
         _search = new SearchResultsPage(
             Driver,
             Timeout,
             TimeSpan.FromSeconds(Settings.SearchMinimumIntervalSeconds));
         _stock = new ProductStockDialog(Driver, Timeout);
-        _basket = new BasketPage(Driver, Timeout);
+        base.OnBasketReady();
     }
 
     /// <summary>
@@ -49,8 +48,8 @@ public sealed class BasketBackorderTests : AuthenticatedUiTestFixture
     [Property("TestCaseId", "BASKET-013")]
     public void BackorderedProductReachesBasketFromStockDialog()
     {
-        _basket.Open(Settings.BaseUrl);
-        _basket.RemoveProduct(ExpectedCard);
+        Basket.Open(Settings.BaseUrl);
+        Basket.RemoveProduct(ExpectedCard);
 
         _search.Reset(Settings.BaseUrl);
         _search.Search(ProductCode);
@@ -67,14 +66,14 @@ public sealed class BasketBackorderTests : AuthenticatedUiTestFixture
         _stock.AddFirstOptionToBasket();
         _stock.Close();
 
-        _basket.Open(Settings.BaseUrl);
+        Basket.Open(Settings.BaseUrl);
 
         Assert.Multiple(() =>
         {
-            Assert.That(_basket.HasProduct(ExpectedCard), Is.True,
+            Assert.That(Basket.HasProduct(ExpectedCard), Is.True,
                 "Позиция под заказ не появилась в корзине.");
-            Assert.That(_basket.ProductRowCount(ExpectedCard), Is.EqualTo(1));
-            Assert.That(_basket.SectionOf(ExpectedCard), Is.EqualTo(BasketPage.BackorderSection),
+            Assert.That(Basket.ProductRowCount(ExpectedCard), Is.EqualTo(1));
+            Assert.That(Basket.SectionOf(ExpectedCard), Is.EqualTo(BasketPage.BackorderSection),
                 "Позиция под заказ оказалась не в том разделе корзины.");
         });
     }
@@ -87,8 +86,8 @@ public sealed class BasketBackorderTests : AuthenticatedUiTestFixture
 
         try
         {
-            _basket.Open(Settings.BaseUrl);
-            _basket.RemoveProduct(ExpectedCard);
+            Basket.Open(Settings.BaseUrl);
+            Basket.RemoveProduct(ExpectedCard);
         }
         catch (Exception exception)
         {

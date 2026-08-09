@@ -17,16 +17,10 @@ namespace UiAutomation.Tests.Tests.Basket;
 [Category("Smoke")]
 [Category(TestCategories.ProductionBlocked)]
 [Category(TestCategories.MutatesUserState)]
-public sealed class BasketClearTests : AuthenticatedUiTestFixture
+public sealed class BasketClearTests : BasketTestBase
 {
     private const string Card = "4610495";
 
-    private BasketPage _basket = null!;
-
-    protected override void OnAuthenticated() => _basket = new BasketPage(Driver, Timeout);
-
-    [SetUp]
-    public void OpenBasket() => _basket.Open(Settings.BaseUrl);
 
     /// <summary>
     /// Ручной сценарий: убедиться, что кнопка очистки отображается, и нажать её.
@@ -39,21 +33,21 @@ public sealed class BasketClearTests : AuthenticatedUiTestFixture
     {
         // Кнопки очистки нет в разметке, пока корзина пуста, поэтому сначала
         // гарантируем непустое состояние.
-        _basket.AddProduct(Card);
-        Assert.That(_basket.HasClearButton, Is.True, "Кнопка очистки не появилась при непустой корзине.");
+        Basket.AddProduct(Card);
+        Assert.That(Basket.HasClearButton, Is.True, "Кнопка очистки не появилась при непустой корзине.");
 
-        _basket.ClearBasket();
-        Assert.That(_basket.ProductCards, Is.Empty);
+        Basket.ClearBasket();
+        Assert.That(Basket.ProductCards, Is.Empty);
 
         // Сразу после очистки кнопка остаётся в разметке с классами ng-leave:
         // Angular запускает анимацию исчезновения, которая в headless-сессии
         // не доигрывает. Поэтому проверяем отсутствие кнопки после перезагрузки.
-        _basket.Reload();
+        Basket.Reload();
 
         Assert.Multiple(() =>
         {
-            Assert.That(_basket.ProductCards, Is.Empty);
-            Assert.That(_basket.HasClearButton, Is.False, "Кнопка очистки осталась при пустой корзине.");
+            Assert.That(Basket.ProductCards, Is.Empty);
+            Assert.That(Basket.HasClearButton, Is.False, "Кнопка очистки осталась при пустой корзине.");
         });
     }
 }
