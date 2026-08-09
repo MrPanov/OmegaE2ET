@@ -17,6 +17,10 @@ public sealed class BasketAddProductTests : BasketTestBase
     private const string Card = "4610495";
     private const string CatalogCode = "OC90";
 
+    /// <summary>Шина 165/65R15 81H N-BLUE HD PLUS (Nexen) DOT24 — товар другой категории.</summary>
+    private const string TyreCode = "15106DOT24";
+    private const string TyreCard = "14961417887";
+
     private string? _addedCard;
 
     protected override void OnBasketReady()
@@ -113,6 +117,30 @@ public sealed class BasketAddProductTests : BasketTestBase
         {
             Assert.That(Basket.IsProductSelected(Card), Is.True);
             Assert.That(Basket.SelectedTotal, Is.GreaterThan(0));
+        });
+    }
+
+    /// <summary>
+    /// Ручной сценарий: добавить шину по её каталожному коду.
+    /// Ожидаемый результат: позиция добавлена одной строкой под своим номером карточки.
+    /// </summary>
+    /// <remarks>
+    /// Товар другой категории, чем масляный фильтр из остальных сценариев: у шин
+    /// свой набор атрибутов в строке, поэтому добавление проверяется и на нём.
+    /// </remarks>
+    [Test]
+    [Property("TestCaseId", "BASKET-014")]
+    public void TyreIsAddedByCatalogCode()
+    {
+        Basket.RemoveProduct(TyreCard);
+
+        _addedCard = TyreCard;
+        Basket.AddByCode(TyreCode, TyreCard, expectedQuantity: 1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Basket.ProductRowCount(TyreCard), Is.EqualTo(1));
+            Assert.That(Basket.ProductQuantity(TyreCard), Is.EqualTo(1));
         });
     }
 
