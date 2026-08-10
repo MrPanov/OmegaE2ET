@@ -84,6 +84,7 @@ public sealed class MainMenuPage(IWebDriver driver, TimeSpan waitTimeout)
 
         _wait.Until(d =>
             d.Url.Contains(expectedRoute, StringComparison.OrdinalIgnoreCase));
+        driver.WaitUntilSectionIsLoaded(waitTimeout);
     }
 
     private IWebElement VisibleMenuItem(string itemName) => _wait.Until(d =>

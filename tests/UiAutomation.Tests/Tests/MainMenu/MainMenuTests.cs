@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using OpenQA.Selenium;
 using UiAutomation.Tests.Infrastructure;
 using UiAutomation.Tests.Pages;
 
@@ -32,6 +33,47 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
 {
     private MainMenuPage _mainMenu = null!;
     private AppTabs _tabs = null!;
+
+    /// <summary>
+    /// Сколько вкладок было открыто до того, как проверка открыла свою.
+    /// </summary>
+    private int _tabsBeforeOpen;
+
+    /// <summary>
+    /// Пункт меню: имя, устойчивая часть маршрута и признак того, что раздел
+    /// догрузился, вместе с человеческим названием этого признака для сообщения
+    /// об ошибке.
+    /// </summary>
+    public sealed record MenuItem(
+        string Name,
+        string Route,
+        By ReadyMarker,
+        string ReadyMarkerName)
+    {
+        public MenuItem(string name, string route, By headingMarker)
+            : this(name, route, headingMarker, "заголовок раздела")
+        {
+        }
+    }
+
+    /// <summary>
+    /// Заголовок раздела — элемент с этим текстом целиком. Сравнение точное:
+    /// «Журнал заявок» не должен совпасть с «Журнал заявок АМ».
+    /// </summary>
+    private static By Heading(string text) =>
+        By.XPath($"//*[normalize-space(text())={XPathHelpers.Literal(text)}]");
+
+    /// <summary>Выбор адреса доставки над выдачей — он приезжает последним.</summary>
+    private static readonly By AddressPicker =
+        By.CssSelector(".dropdown-account-address-text");
+
+    private const string AddressPickerName = "выбор адреса доставки";
+
+    /// <summary>Карточки товаров в выдаче.</summary>
+    private static readonly By ProductCards =
+        By.CssSelector("searchlist-control a.searchProdCard");
+
+    private const string ProductCardsName = "карточки товаров";
 
     /// <summary>Заголовки, на которые разбито меню.</summary>
     /// <remarks>
@@ -74,27 +116,34 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
     /// маршруту неразличимы. Их различает <c>MainMenuPage</c>: перед кликом он
     /// сверяет href самой ссылки, поэтому пункт, ведущий не туда, виден и здесь.
     /// </remarks>
-    private static readonly (string Name, string Route)[] MenuItems =
+    private static readonly MenuItem[] MenuItems =
     [
-        ("Деб. заборгованість", "#/app/receivablesList"),
-        ("Взаєморозрахунки", "#/app/mutualSettlementsList"),
-        ("Новий товар", "#/app/simplesearch"),
-        ("Розпродаж", "#/app/simplesearch"),
-        ("Вибрані товари", "#/app/simplesearch"),
-        ("Відвантажені товари", "#/app/simplesearch"),
-        ("Залишки по ВЗ", "#/app/safeStorage"),
-        ("Рахунки", "#/app/basket"),
-        ("Видаткові накладні", "#/app/expenseList"),
-        ("Податкові накладні", "#/app/taxInvoiceList"),
-        ("Коригування до податкових накладних", "#/app/taxInvoiceChangeList"),
-        ("Посилки", "#/app/sendbox"),
-        ("Повернення", "#/app/claimsList"),
-        ("Заявки АМ", "#/app/assortmentMatrixList"),
-        ("Облік закупівель", "#/app/purchase"),
-        ("Зворотний звʼязок", "#/app/ticket"),
-        ("Запити", "#/app/requestList"),
-        ("Аукціон", "#/app/auction"),
-        ("Кошик повернень", "#/app/claimsBasket")
+        new("Деб. заборгованість", "#/app/receivablesList",
+            Heading("Дебіторська заборгованість")),
+        new("Взаєморозрахунки", "#/app/mutualSettlementsList",
+            Heading("Взаєморозрахунки")),
+        new("Новий товар", "#/app/simplesearch", AddressPicker, AddressPickerName),
+        new("Розпродаж", "#/app/simplesearch", AddressPicker, AddressPickerName),
+        new("Вибрані товари", "#/app/simplesearch", ProductCards, ProductCardsName),
+        new("Відвантажені товари", "#/app/simplesearch", AddressPicker, AddressPickerName),
+        new("Залишки по ВЗ", "#/app/safeStorage",
+            Heading("Залишки по відповідальному зберіганню")),
+        new("Рахунки", "#/app/basket", Heading("Товари зі складу")),
+        new("Видаткові накладні", "#/app/expenseList",
+            Heading("Журнал видаткових накладних")),
+        new("Податкові накладні", "#/app/taxInvoiceList",
+            Heading("Журнал податкових накладних")),
+        new("Коригування до податкових накладних", "#/app/taxInvoiceChangeList",
+            Heading("Журнал корегування ПН")),
+        new("Посилки", "#/app/sendbox", Heading("Журнал посилок")),
+        new("Повернення", "#/app/claimsList", Heading("Мої повернення")),
+        new("Заявки АМ", "#/app/assortmentMatrixList", Heading("Журнал заявок АМ")),
+        new("Облік закупівель", "#/app/purchase", Heading("Облік закупівель")),
+        new("Зворотний звʼязок", "#/app/ticket", Heading("Мої відгуки")),
+        new("Запити", "#/app/requestList", Heading("Журнал заявок")),
+        new("Аукціон", "#/app/auction", Heading("Аукціон")),
+        new("Кошик повернень", "#/app/claimsBasket",
+            Heading("Повернення якісного товару:"))
 
         // Проверять здесь не нужно — решение владельца набора.
         // ("Прайс-листи", "#/app/prices"),
@@ -114,14 +163,20 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
     /// пункт не запустить фильтром.
     /// </summary>
     public static IEnumerable<TestCaseData> RoutedMenuItems =>
-        MenuItems.Select(item =>
-            new TestCaseData(item.Name, item.Route).SetName($"MenuOpens_{item.Name}"));
+        MenuItems.Select(item => new TestCaseData(item).SetName($"MenuOpens_{item.Name}"));
 
     protected override void OnAuthenticated()
     {
         _mainMenu = new MainMenuPage(Driver, Timeout);
         _tabs = new AppTabs(Driver, Timeout);
     }
+
+    /// <summary>
+    /// Запоминает, сколько вкладок было до проверки, чтобы уборка знала, что
+    /// именно эта проверка открыла.
+    /// </summary>
+    [SetUp]
+    public void RememberOpenTabs() => _tabsBeforeOpen = _tabs.Count;
 
     /// <summary>
     /// Ручной сценарий: войти на сайт и осмотреть шапку.
@@ -193,50 +248,97 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
     }
 
     /// <summary>
-    /// Ручной сценарий: раскрыть меню, нажать пункт, убедиться, что открылся его
-    /// раздел, и закрыть вкладку раздела.
-    /// Ожидаемый результат: пункт уводит на свой маршрут, а его вкладка после
-    /// закрытия исчезает из панели. Повторяется для каждого проверяемого пункта.
+    /// Ручной сценарий: раскрыть меню, нажать пункт, дождаться, пока раздел
+    /// догрузится, и закрыть его вкладку.
+    /// Ожидаемый результат: пункт уводит на свой маршрут, раздел прогружается
+    /// до своего опознавательного элемента и открывается собственной вкладкой,
+    /// а после теста вкладка закрывается. Повторяется для каждого пункта.
     /// </summary>
     /// <remarks>
+    /// Смена адреса — ещё не открытый раздел: маршрут переключается сразу,
+    /// а содержимое приезжает позже, и всё это время страница закрыта оверлеем
+    /// загрузки. Поэтому готовность подтверждают четыре вещи вместе — адрес,
+    /// снятый оверлей, появившаяся вкладка и опознавательный элемент самого
+    /// раздела из <c>MenuItems</c>.
+    ///
+    /// Опознавательный элемент у каждого раздела свой. У четырнадцати это
+    /// заголовок страницы. У четырёх пунктов, ведущих в общую выдачу
+    /// <c>#/app/simplesearch</c>, заголовка нет вовсе, и ждать приходится того,
+    /// что приезжает последним: выбора адреса доставки, а у «Вибрані товари» —
+    /// карточек товаров, потому что там выдача непустая по определению.
+    ///
     /// По случаю на пункт, а не единым обходом: так падение одного пункта видно
     /// по имени прямо в отчёте, а отдельный пункт можно прогнать фильтром —
     /// <c>--filter "FullyQualifiedName~MenuOpens_Заявки"</c>. Вход всё равно один
     /// на всю фикстуру, лишних сессий это не создаёт.
     ///
-    /// Проверка того, что открылось, ограничена маршрутом: содержимое каждого
+    /// Дальше опознавательного элемента проверка не идёт: содержимое каждого
     /// раздела — предмет отдельных наборов, которые появятся позже. Здесь
     /// отвечают только на вопрос «работают ли пункты меню».
     ///
     /// Клик ждёт исчезновения <c>block-ui-overlay</c>: пока приложение грузит
     /// предыдущий раздел, нажатие перехватывает оверлей, а не пункт меню.
     ///
-    /// Вкладка закрывается сразу после проверки и её закрытие сверяется по числу
-    /// вкладок. Приложение держит вкладки на сервере, привязанными к учётной
-    /// записи: незакрытая вкладка переживает не только соседние проверки,
-    /// но и весь прогон, и следующий прогон споткнётся уже об неё. Проверено
-    /// на живом сайте — раздел, открытый в чужой сессии того же пользователя,
-    /// в сессии прогона не открывается вовсе, и ожидание адреса выходит
-    /// по таймауту.
+    /// Ожидание завершения запросов здесь не для красоты. Пока его не было,
+    /// набор стабильно падал на «Заявки АМ»: следующий пункт нажимался, когда
+    /// предыдущий раздел ещё догружал данные, и приложение проглатывало переход —
+    /// адрес не менялся до самого таймаута. Поодиночке тот же пункт проходил
+    /// за секунду, потому что перед ним ничего не грузилось.
     /// </remarks>
     [TestCaseSource(nameof(RoutedMenuItems))]
     [Category("Smoke")]
-    public void MenuItemOpensItsSection(string itemName, string expectedRoute)
+    public void MenuItemOpensItsSection(MenuItem item)
     {
-        var tabsBeforeOpen = _tabs.Count;
+        _mainMenu.OpenMenuItem(item.Name, item.Route);
 
-        _mainMenu.OpenMenuItem(itemName, expectedRoute);
+        var isSectionReady = Driver.WaitUntilVisible(item.ReadyMarker, Timeout);
 
-        Assert.That(
-            Driver.Url,
-            Does.Contain(expectedRoute).IgnoreCase,
-            $"Пункт «{itemName}» не открыл свой раздел.");
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                Driver.Url,
+                Does.Contain(item.Route).IgnoreCase,
+                $"Пункт «{item.Name}» не открыл свой раздел.");
+            Assert.That(
+                isSectionReady,
+                Is.True,
+                $"Раздел «{item.Name}» не догрузился: не появился {item.ReadyMarkerName}.");
+            Assert.That(
+                _tabs.Count,
+                Is.GreaterThan(_tabsBeforeOpen),
+                $"Раздел «{item.Name}» открылся без собственной вкладки.");
+            Assert.That(
+                _tabs.ActiveLabel,
+                Is.Not.Empty,
+                $"Вкладка раздела «{item.Name}» открыта без заголовка.");
+        });
+    }
+
+    /// <summary>
+    /// Закрывает вкладку, открытую проверкой, и убеждается, что панель вернулась
+    /// к прежнему числу вкладок.
+    /// </summary>
+    /// <remarks>
+    /// Уборка стоит именно здесь, а не в конце теста: при упавшей проверке тело
+    /// теста до закрытия не доходит, и вкладка остаётся. Разбираться потом
+    /// приходится не с первой причиной, а с её последствиями.
+    ///
+    /// Вкладки живут всю сессию и хранятся на сервере, поэтому незакрытая
+    /// вкладка достаётся и следующему прогону. На открытие разделов это, как
+    /// выяснилось, не влияет — набор проходит и при открытых в другой сессии
+    /// разделах, — но панель разрастается и перехватывает клики по тому,
+    /// что под ней.
+    /// </remarks>
+    [TearDown]
+    public void CloseSectionTabOpenedByTest()
+    {
+        if (_tabs.Count <= _tabsBeforeOpen) return;
 
         _tabs.CloseActive();
 
         Assert.That(
             _tabs.Count,
-            Is.EqualTo(tabsBeforeOpen),
-            $"Вкладка раздела «{itemName}» осталась открытой.");
+            Is.EqualTo(_tabsBeforeOpen),
+            "Вкладка раздела осталась открытой и помешает следующим проверкам.");
     }
 }
