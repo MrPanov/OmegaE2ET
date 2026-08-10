@@ -37,7 +37,28 @@ public sealed class ProductStockDialog(IWebDriver driver, TimeSpan waitTimeout)
         var link = _wait.Until(_ => driver.FindElements(StockLinkBy)
             .FirstOrDefault(element => element.Displayed));
         driver.ClickRobustly(link);
-        _wait.Until(_ => IsOpen && BackorderOptionCount > 0);
+        _wait.Until(_ => IsOpen);
+        WaitForBackorderOptions();
+    }
+
+    /// <summary>
+    /// Ждёт появления строк поставок под заказ: окно открывается раньше, чем они
+    /// отрисованы.
+    /// </summary>
+    /// <remarks>
+    /// Таймаут гасится намеренно. Отсутствие поставок — это то, что проверяет
+    /// SEARCH-009, и падение должно приходить из его утверждения с внятным
+    /// текстом, а не из ожидания внутри открытия окна.
+    /// </remarks>
+    private void WaitForBackorderOptions()
+    {
+        try
+        {
+            _wait.Until(_ => BackorderOptionCount > 0);
+        }
+        catch (WebDriverTimeoutException)
+        {
+        }
     }
 
     /// <summary>

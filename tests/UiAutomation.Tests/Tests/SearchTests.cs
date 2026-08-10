@@ -5,12 +5,13 @@ using UiAutomation.Tests.Pages;
 namespace UiAutomation.Tests.Tests;
 
 /// <summary>
-/// Поиск по строке в шапке: по каким идентификаторам находится эталонный товар
-/// и куда уводят запросы по VIN и государственному номеру.
+/// Поиск по строке в шапке: по каким идентификаторам находится эталонный товар,
+/// показывает ли выдача товар без складского остатка и куда уводят запросы
+/// по VIN и государственному номеру.
 /// </summary>
 /// <remarks>
 /// Сервер ограничивает частоту поиска и при превышении отклоняет запросы целиком,
-/// поэтому набор намеренно экономный: один поиск на сценарий, семь на весь прогон.
+/// поэтому набор намеренно экономный: один поиск на сценарий, восемь на весь прогон.
 /// Интервал между запросами выдерживает <c>SearchResultsPage</c> по настройке
 /// <c>SEARCH_MIN_INTERVAL_SECONDS</c> — на тестовой среде это 5 секунд, то есть
 /// не более двенадцати запросов в минуту при разрешённых тридцати.
@@ -23,8 +24,16 @@ namespace UiAutomation.Tests.Tests;
 [Category(TestCategories.MutatesUserState)]
 public sealed class SearchTests : AuthenticatedUiTestFixture
 {
+    /// <summary>
+    /// Товар без складского остатка: «Фільтр масляний (Вир-во MEYLE)». Тот же код
+    /// использует BASKET-013 — там поставка действительно кладётся в корзину,
+    /// здесь проверяется только то, что выдача до неё доводит.
+    /// </summary>
+    private const string OutOfStockProductCode = "614 065 0004";
+
     private SearchResultsPage _search = null!;
     private VinSearchPage _vin = null!;
+    private ProductStockDialog _stock = null!;
 
     protected override void OnAuthenticated()
     {
@@ -37,6 +46,7 @@ public sealed class SearchTests : AuthenticatedUiTestFixture
             Timeout,
             TimeSpan.FromSeconds(Settings.SearchMinimumIntervalSeconds));
         _vin = new VinSearchPage(Driver, Timeout);
+        _stock = new ProductStockDialog(Driver, Timeout);
     }
 
     /// <summary>
@@ -185,6 +195,53 @@ public sealed class SearchTests : AuthenticatedUiTestFixture
                 Does.Contain(Settings.SearchData.ProductBrand),
                 $"Показаны: {string.Join(", ", _search.ProductBrands.Distinct())}");
         });
+    }
+
+    /// <summary>
+    /// Ручной сценарий: ввести код товара, у которого нет складского остатка,
+    /// и открыть в его строке «див. наяв.».
+    /// Ожидаемый результат: товар в выдаче есть, окно «Залишки» открыто именно
+    /// по нему и показывает блок «Під замовлення на склад Омеги», в котором есть
+    /// хотя бы одна поставка с кнопкой добавления в корзину.
+    /// </summary>
+    /// <remarks>
+    /// Отсутствие остатка не убирает товар из поиска — его продают под заказ,
+    /// поэтому выдача обязана довести до окна остатков, а окно — предложить заказ.
+    /// Дальше сценарий не идёт: нажатие кнопки меняет общую корзину и проверено
+    /// в BASKET-013, а рядом с ней стоит «Відвантажити», создающая настоящий
+    /// документ отгрузки.
+    ///
+    /// Принадлежность окна товару проверяется по его коду в тексте окна, а не по
+    /// строке выдачи: «див. наяв.» открывается кликом по первой позиции, и без
+    /// этой сверки окно соседнего товара выглядело бы как успех.
+    /// </remarks>
+    [Test]
+    [Category("Smoke")]
+    [Category("P0")]
+    [Property("TestCaseId", "SEARCH-009")]
+    public void OutOfStockProductIsOfferedForBackorderFromSearch()
+    {
+        _search.Search(OutOfStockProductCode);
+
+        Assert.That(_search.ProductCodes, Is.Not.Empty, "Товар без остатка не найден.");
+
+        _stock.OpenForFirstSearchResult();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_stock.IsOpen, Is.True, "Окно «Залишки» не открылось.");
+            Assert.That(
+                _stock.Text,
+                Does.Contain(OutOfStockProductCode),
+                "Окно остатков открыто не по тому товару.");
+            Assert.That(_stock.Text, Does.Contain("Під замовлення на склад Омеги"));
+            Assert.That(
+                _stock.BackorderOptionCount,
+                Is.GreaterThan(0),
+                "Ни одну поставку под заказ нельзя добавить в корзину.");
+        });
+
+        _stock.Close();
     }
 
     /// <summary>
