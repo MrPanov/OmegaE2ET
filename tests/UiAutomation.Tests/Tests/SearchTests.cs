@@ -115,8 +115,8 @@ public sealed class SearchTests : AuthenticatedUiTestFixture
     /// эталонный товар вместе с его аналогом.
     /// </summary>
     [Test]
-    [Category("Smoke")]
-    [Category("P0")]
+    [Category("SearchByDescription")]
+    [Category("P1")]
     [Property("TestCaseId", "SEARCH-004")]
     public void FullDescriptionFindsReferenceProductAndItsAnalogue()
     {
@@ -138,8 +138,8 @@ public sealed class SearchTests : AuthenticatedUiTestFixture
     /// производителей — поиск не сужается до одного бренда.
     /// </summary>
     [Test]
-    [Category("Smoke")]
-    [Category("P0")]
+    [Category("SearchByDescription")]
+    [Category("P1")]
     [Property("TestCaseId", "SEARCH-005")]
     public void PartialDescriptionSpansSeveralBrands()
     {
@@ -170,8 +170,8 @@ public sealed class SearchTests : AuthenticatedUiTestFixture
     /// подтверждает попадание в нужного производителя, а не отсутствие остальных.
     /// </remarks>
     [Test]
-    [Category("Smoke")]
-    [Category("P0")]
+    [Category("SearchByDescription")]
+    [Category("P1")]
     [Property("TestCaseId", "SEARCH-006")]
     public void BrandQueryFindsThatBrandProducts()
     {
@@ -199,6 +199,7 @@ public sealed class SearchTests : AuthenticatedUiTestFixture
     [Test]
     [Category("Smoke")]
     [Category("P0")]
+    [Category("VehicleSearch")]
     [Property("TestCaseId", "SEARCH-007")]
     public void VinOpensVehicleModificationsSection()
     {
@@ -227,6 +228,7 @@ public sealed class SearchTests : AuthenticatedUiTestFixture
     [Test]
     [Category("Smoke")]
     [Category("P0")]
+    [Category("VehicleSearch")]
     [Property("TestCaseId", "SEARCH-008")]
     public void LicensePlateResolvesToTheSameVehicle()
     {

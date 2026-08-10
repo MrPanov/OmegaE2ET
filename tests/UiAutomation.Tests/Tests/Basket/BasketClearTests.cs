@@ -18,6 +18,7 @@ namespace UiAutomation.Tests.Tests.Basket;
 [NonParallelizable]
 [Category("Basket")]
 [Category("Smoke")]
+[Category("P0")]
 [Category(TestCategories.ProductionTestClient)]
 [Category(TestCategories.MutatesUserState)]
 public sealed class BasketClearTests : BasketTestBase
@@ -26,10 +27,17 @@ public sealed class BasketClearTests : BasketTestBase
 
 
     /// <summary>
-    /// Ручной сценарий: убедиться, что кнопка очистки отображается, и нажать её.
-    /// Ожидаемый результат: корзина пуста, кнопка очистки исчезает вместе
-    /// с последней позицией.
+    /// Ручной сценарий: убедиться, что кнопка очистки отображается, нажать её,
+    /// затем обновить страницу.
+    /// Ожидаемый результат: корзина пуста, а после обновления кнопки очистки
+    /// на странице нет — она появляется только при непустой корзине.
     /// </summary>
+    /// <remarks>
+    /// Обновление обязательно: сразу после очистки кнопка остаётся в разметке
+    /// с классами <c>ng-leave</c> — Angular запускает анимацию исчезновения,
+    /// которая в сессии Selenium не доигрывает. Переход по тому же хешу
+    /// перезагрузки не даёт, поэтому используется настоящий Refresh.
+    /// </remarks>
     [Test]
     [Property("TestCaseId", "BASKET-012")]
     public void ClearBasketRemovesEveryRow()
