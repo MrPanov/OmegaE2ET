@@ -101,7 +101,7 @@ dotnet test --filter "TestCategory=P1"
 реализованы один раз в `CatalogFilterTestBase`.
 
 Автоматические smoke-тесты главного `Меню` находятся в
-`tests/UiAutomation.Tests/Tests/MainMenuTests.cs`. Для всего класса также
+`tests/UiAutomation.Tests/Tests/MainMenu`. Для всего класса также
 используется одна авторизация и один браузерный сеанс. UUID в ссылках не
 проверяются, поскольку зависят от аккаунта; проверяется стабильная часть маршрута.
 

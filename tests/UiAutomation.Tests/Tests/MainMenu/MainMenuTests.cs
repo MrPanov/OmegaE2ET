@@ -2,7 +2,7 @@ using NUnit.Framework;
 using UiAutomation.Tests.Infrastructure;
 using UiAutomation.Tests.Pages;
 
-namespace UiAutomation.Tests.Tests;
+namespace UiAutomation.Tests.Tests.MainMenu;
 
 /// <summary>
 /// Главное меню авторизованной части: кнопка меню, раскрытие и сворачивание,
