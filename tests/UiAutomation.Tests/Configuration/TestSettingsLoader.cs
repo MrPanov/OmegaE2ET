@@ -6,14 +6,6 @@ namespace UiAutomation.Tests.Configuration;
 
 internal static class TestSettingsLoader
 {
-    private const string TestEnvironment = "Test";
-    private const string ProductionEnvironment = "Production";
-    private const string TestHost = "test.omega.page";
-    private const string ProductionHost = "my.omega.page";
-    private const string TestBaseUrl = "https://test.omega.page/";
-    private const string ProductionBaseUrl = "https://my.omega.page/";
-    private const string TestLoginEmail = "web@omega-auto.biz";
-
     private static readonly SearchTestData DefaultTestSearchData = new(
         ProductCode: "OC90",
         ProductCard: "4610495",
@@ -29,6 +21,36 @@ internal static class TestSettingsLoader
         PunctuatedProductCode: "23.129.02",
         MissingProductQuery: "zz-no-product-987654321",
         SearchPlaceholder: "VIN, Держ. номер, OE, найменування, картка, код");
+
+    /// <summary>
+    /// Всё, что отличает одну среду от другой. Собрано в одном месте, чтобы
+    /// добавление среды не требовало править ветвления по всему загрузчику.
+    /// </summary>
+    private sealed record EnvironmentProfile(
+        string Name,
+        string Host,
+        string BaseUrl,
+        string LoginEmail,
+        int SearchIntervalSeconds,
+        SearchTestData SearchData);
+
+    private static readonly EnvironmentProfile TestProfile = new(
+        Name: "Test",
+        Host: "test.omega.page",
+        BaseUrl: "https://test.omega.page/",
+        LoginEmail: "web@omega-auto.biz",
+        SearchIntervalSeconds: 5,
+        SearchData: DefaultTestSearchData);
+
+    private static readonly EnvironmentProfile ProductionProfile = new(
+        Name: "Production",
+        Host: "my.omega.page",
+        BaseUrl: "https://my.omega.page/",
+        LoginEmail: string.Empty,
+        SearchIntervalSeconds: 10,
+        SearchData: SearchTestData.Empty);
+
+    private static readonly EnvironmentProfile[] Profiles = [TestProfile, ProductionProfile];
 
     public static TestSettings LoadFromProcess()
     {
@@ -51,25 +73,20 @@ internal static class TestSettingsLoader
         string Get(string name, string fallback) =>
             getEnvironmentVariable(name) is { Length: > 0 } value ? value : fallback;
 
-        var environmentName = Get(
+        var requestedEnvironment = Get(
             "OMEGA_ENVIRONMENT",
-            localSettings?.ActiveEnvironment ?? TestEnvironment).Trim();
-        var isTestEnvironment = string.Equals(
-            environmentName,
-            TestEnvironment,
-            StringComparison.OrdinalIgnoreCase);
-        var isProductionEnvironment = string.Equals(
-            environmentName,
-            ProductionEnvironment,
-            StringComparison.OrdinalIgnoreCase);
+            localSettings?.ActiveEnvironment ?? TestProfile.Name).Trim();
+        var profile = Profiles.FirstOrDefault(candidate => string.Equals(
+                candidate.Name,
+                requestedEnvironment,
+                StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException(
+                $"Unknown environment '{requestedEnvironment}'. Supported values: " +
+                $"{string.Join(", ", Profiles.Select(item => item.Name))}.");
 
-        if (!isTestEnvironment && !isProductionEnvironment)
-        {
-            throw new InvalidOperationException(
-                $"Unknown environment '{environmentName}'. Supported values: Test, Production.");
-        }
-
-        environmentName = isProductionEnvironment ? ProductionEnvironment : TestEnvironment;
+        // Дальше используется каноническое имя профиля, а не то, как его написали.
+        var environmentName = profile.Name;
+        var isProductionEnvironment = profile == ProductionProfile;
         var localEnvironment = localSettings?.Environments?
             .FirstOrDefault(item => string.Equals(
                 item.Key,
@@ -96,26 +113,24 @@ internal static class TestSettingsLoader
                 "Production tests are blocked. Set ALLOW_PRODUCTION_TESTS=true to confirm the run.");
         }
 
-        var defaultBaseUrl = isTestEnvironment ? TestBaseUrl : ProductionBaseUrl;
-        var profileBaseUrl = string.IsNullOrWhiteSpace(localEnvironment?.BaseUrl)
-            ? defaultBaseUrl
-            : localEnvironment.BaseUrl;
-        var baseUrl = Get("BASE_URL", profileBaseUrl);
+        var baseUrl = Get("BASE_URL", string.IsNullOrWhiteSpace(localEnvironment?.BaseUrl)
+            ? profile.BaseUrl
+            : localEnvironment.BaseUrl);
         var loginEmail = Get(
             "OMEGA_EMAIL",
             FirstConfigured(
                 localEnvironment?.LoginEmail,
                 credentialsEnvironment?.LoginEmail,
-                isTestEnvironment ? TestLoginEmail : string.Empty));
+                profile.LoginEmail));
         var loginPassword = Get(
             "OMEGA_PASSWORD",
             FirstConfigured(
                 localEnvironment?.LoginPassword,
                 credentialsEnvironment?.LoginPassword,
                 string.Empty));
-        var searchData = CreateSearchData(localEnvironment?.Search, isTestEnvironment, Get);
+        var searchData = CreateSearchData(localEnvironment?.Search, profile.SearchData, Get);
 
-        ValidateBaseUrl(environmentName, baseUrl);
+        ValidateBaseUrl(profile, baseUrl);
         ValidateCredentials(
             environmentName,
             isProductionEnvironment,
@@ -136,7 +151,7 @@ internal static class TestSettingsLoader
                 Get),
             SearchMinimumIntervalSeconds: GetInt(
                 "SEARCH_MIN_INTERVAL_SECONDS",
-                localEnvironment?.SearchMinimumIntervalSeconds ?? (isTestEnvironment ? 5 : 10),
+                localEnvironment?.SearchMinimumIntervalSeconds ?? profile.SearchIntervalSeconds,
                 minimum: 0,
                 maximum: 60,
                 Get),
@@ -172,45 +187,33 @@ internal static class TestSettingsLoader
         values.FirstOrDefault(value =>
             value is not null && TestSettings.IsConfigured(value)) ?? string.Empty;
 
+    /// <summary>
+    /// Приоритет одинаков для всех полей: переменная окружения, затем локальный
+    /// профиль, затем эталон среды. Поэтому правило вынесено в <c>Field</c>,
+    /// а перечисление осталось плоским списком имён.
+    /// </summary>
     private static SearchTestData CreateSearchData(
         LocalSearchTestData? local,
-        bool isTestEnvironment,
+        SearchTestData fallback,
         Func<string, string, string> get)
     {
-        var fallback = isTestEnvironment ? DefaultTestSearchData : SearchTestData.Empty;
+        string Field(string name, string? profileValue, string defaultValue) =>
+            get($"SEARCH_{name}", profileValue ?? defaultValue);
 
         return new SearchTestData(
-            ProductCode: get("SEARCH_PRODUCT_CODE", local?.ProductCode ?? fallback.ProductCode),
-            ProductCard: get("SEARCH_PRODUCT_CARD", local?.ProductCard ?? fallback.ProductCard),
-            ProductDescription: get(
-                "SEARCH_PRODUCT_DESCRIPTION",
-                local?.ProductDescription ?? fallback.ProductDescription),
-            ProductBrand: get("SEARCH_PRODUCT_BRAND", local?.ProductBrand ?? fallback.ProductBrand),
-            AlternativeProductCode: get(
-                "SEARCH_ALTERNATIVE_PRODUCT_CODE",
-                local?.AlternativeProductCode ?? fallback.AlternativeProductCode),
-            PartialDescription: get(
-                "SEARCH_PARTIAL_DESCRIPTION",
-                local?.PartialDescription ?? fallback.PartialDescription),
-            CyrillicQuery: get(
-                "SEARCH_CYRILLIC_QUERY",
-                local?.CyrillicQuery ?? fallback.CyrillicQuery),
-            CyrillicExpectedText: get(
-                "SEARCH_CYRILLIC_EXPECTED_TEXT",
-                local?.CyrillicExpectedText ?? fallback.CyrillicExpectedText),
-            LatinQuery: get("SEARCH_LATIN_QUERY", local?.LatinQuery ?? fallback.LatinQuery),
-            LatinExpectedText: get(
-                "SEARCH_LATIN_EXPECTED_TEXT",
-                local?.LatinExpectedText ?? fallback.LatinExpectedText),
-            PunctuatedProductCode: get(
-                "SEARCH_PUNCTUATED_PRODUCT_CODE",
-                local?.PunctuatedProductCode ?? fallback.PunctuatedProductCode),
-            MissingProductQuery: get(
-                "SEARCH_MISSING_PRODUCT_QUERY",
-                local?.MissingProductQuery ?? fallback.MissingProductQuery),
-            SearchPlaceholder: get(
-                "SEARCH_PLACEHOLDER",
-                local?.SearchPlaceholder ?? fallback.SearchPlaceholder));
+            ProductCode: Field("PRODUCT_CODE", local?.ProductCode, fallback.ProductCode),
+            ProductCard: Field("PRODUCT_CARD", local?.ProductCard, fallback.ProductCard),
+            ProductDescription: Field("PRODUCT_DESCRIPTION", local?.ProductDescription, fallback.ProductDescription),
+            ProductBrand: Field("PRODUCT_BRAND", local?.ProductBrand, fallback.ProductBrand),
+            AlternativeProductCode: Field("ALTERNATIVE_PRODUCT_CODE", local?.AlternativeProductCode, fallback.AlternativeProductCode),
+            PartialDescription: Field("PARTIAL_DESCRIPTION", local?.PartialDescription, fallback.PartialDescription),
+            CyrillicQuery: Field("CYRILLIC_QUERY", local?.CyrillicQuery, fallback.CyrillicQuery),
+            CyrillicExpectedText: Field("CYRILLIC_EXPECTED_TEXT", local?.CyrillicExpectedText, fallback.CyrillicExpectedText),
+            LatinQuery: Field("LATIN_QUERY", local?.LatinQuery, fallback.LatinQuery),
+            LatinExpectedText: Field("LATIN_EXPECTED_TEXT", local?.LatinExpectedText, fallback.LatinExpectedText),
+            PunctuatedProductCode: Field("PUNCTUATED_PRODUCT_CODE", local?.PunctuatedProductCode, fallback.PunctuatedProductCode),
+            MissingProductQuery: Field("MISSING_PRODUCT_QUERY", local?.MissingProductQuery, fallback.MissingProductQuery),
+            SearchPlaceholder: Field("PLACEHOLDER", local?.SearchPlaceholder, fallback.SearchPlaceholder));
     }
 
     private static bool GetBool(
@@ -246,32 +249,26 @@ internal static class TestSettingsLoader
         return value;
     }
 
-    private static void ValidateBaseUrl(string environmentName, string baseUrl)
+    private static void ValidateBaseUrl(EnvironmentProfile profile, string baseUrl)
     {
         if (!TestSettings.IsConfigured(baseUrl) ||
             !Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri))
         {
             throw new InvalidOperationException(
-                $"Base URL is not configured for environment '{environmentName}'.");
+                $"Base URL is not configured for environment '{profile.Name}'.");
         }
 
         if (uri.Scheme != Uri.UriSchemeHttps)
         {
             throw new InvalidOperationException(
-                $"Base URL for environment '{environmentName}' must use HTTPS.");
+                $"Base URL for environment '{profile.Name}' must use HTTPS.");
         }
 
-        var expectedHost = string.Equals(
-            environmentName,
-            ProductionEnvironment,
-            StringComparison.OrdinalIgnoreCase)
-            ? ProductionHost
-            : TestHost;
-        if (!string.Equals(uri.Host, expectedHost, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(uri.Host, profile.Host, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                $"Base URL host '{uri.Host}' does not match environment '{environmentName}' " +
-                $"(expected '{expectedHost}').");
+                $"Base URL host '{uri.Host}' does not match environment '{profile.Name}' " +
+                $"(expected '{profile.Host}').");
         }
     }
 
