@@ -254,7 +254,7 @@
 | BASKET-001 | `BasketOpenTests` — единственный, кто переходит в корзину кликом по шапке |
 | BASKET-002…005 | `BasketAddProductTests` |
 | BASKET-007…009, BASKET-011 | `BasketRowControlsTests` |
-| BASKET-012 | `BasketClearTests` (`ProductionBlocked`) |
+| BASKET-012 | `BasketClearTests` |
 | BASKET-013 | `BasketBackorderTests` |
 | BASKET-006, BASKET-010 | не автоматизированы намеренно |
 

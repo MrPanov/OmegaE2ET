@@ -5,17 +5,20 @@ using UiAutomation.Tests.Pages;
 namespace UiAutomation.Tests.Tests.Basket;
 
 /// <summary>
-/// Очистка корзины удаляет все позиции разом, включая чужие, и подтверждения
-/// не запрашивает. Восстановить состав невозможно: строки раздела
-/// «Товари під замовлення» после повторного добавления получают текущие склад
-/// и дату, а не исходные. Поэтому фикстура помечена <see cref="TestCategories.ProductionBlocked"/>
-/// и в Production не выполняется никогда.
+/// Очистка корзины удаляет все позиции разом и подтверждения не запрашивает.
 /// </summary>
+/// <remarks>
+/// Сценарий выполняется и в Production: учётная запись там — такой же тестовый
+/// клиент, поэтому очищается не корзина реального покупателя. Но действие
+/// необратимо, и строки раздела «Товари під замовлення» после повторного
+/// добавления получат текущие склад и дату, а не исходные, — прогон затрёт
+/// состояние, если кто-то готовил его для ручной проверки.
+/// </remarks>
 [TestFixture]
 [NonParallelizable]
 [Category("Basket")]
 [Category("Smoke")]
-[Category(TestCategories.ProductionBlocked)]
+[Category(TestCategories.ProductionTestClient)]
 [Category(TestCategories.MutatesUserState)]
 public sealed class BasketClearTests : BasketTestBase
 {
