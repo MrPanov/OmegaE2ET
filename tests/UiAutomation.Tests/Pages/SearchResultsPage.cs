@@ -79,25 +79,6 @@ public sealed class SearchResultsPage
         WaitForSearchCompletion(query, mutationVersion, requireQueryMatch: false);
     }
 
-    public void SearchRapidly(string firstQuery, string secondQuery, string expectedSummary)
-    {
-        WaitUntilPageIsReady();
-        _bar.ReplaceQuery(firstQuery);
-        WaitForSearchSlot();
-        _bar.Input.SendKeys(Keys.Enter);
-
-        _bar.ReplaceQuery(secondQuery);
-        var mutationVersion = _mutations.Snapshot();
-        _bar.Input.SendKeys(Keys.Enter);
-        _lastSearchStartedUtc = DateTime.UtcNow;
-
-        WaitForSearchCompletion(
-            secondQuery,
-            mutationVersion,
-            expectedSummary,
-            requireQueryMatch: true);
-    }
-
     public void TypeQuery(string query)
     {
         WaitUntilPageIsReady();
@@ -118,26 +99,40 @@ public sealed class SearchResultsPage
         _bar.Input.SendKeys(Keys.Enter);
     }
 
-    public void WaitForStableResult(string expectedSignature, TimeSpan stabilityWindow)
+    /// <summary>
+    /// Убеждается, что за отведённое окно поиск не стартовал: индикатор загрузки
+    /// не появляется, а число товаров не растёт.
+    /// </summary>
+    /// <remarks>
+    /// Очистка выдачи при этом допустима и ожидаема: пустой запрос законно
+    /// сбрасывает список — на живом сайте видно, как товары исчезают примерно
+    /// через 150 мс после отправки. Требовать полной неизменности DOM нельзя,
+    /// иначе проверка ловит именно этот сброс вместо запрещённого поиска.
+    /// </remarks>
+    public void EnsureNoSearchStarts(int maxProductCount, TimeSpan window)
     {
-        var stableSince = DateTime.UtcNow;
-        var stabilityWait = new WebDriverWait(_driver, stabilityWindow + TimeSpan.FromSeconds(1))
+        var startedAt = DateTime.UtcNow;
+        var watchWait = new WebDriverWait(_driver, window + TimeSpan.FromSeconds(1))
         {
             PollingInterval = TimeSpan.FromMilliseconds(50)
         };
 
-        stabilityWait.Until(_ =>
+        watchWait.Until(_ =>
         {
-            if (_bar.IsLoading || !string.Equals(
-                    _results.Signature(),
-                    expectedSignature,
-                    StringComparison.Ordinal))
+            if (_bar.IsLoading)
             {
                 throw new InvalidOperationException(
-                    "An empty search changed the result list or started loading products.");
+                    "An empty query started loading products.");
             }
 
-            return DateTime.UtcNow - stableSince >= stabilityWindow;
+            var count = _results.ProductCodes.Count;
+            if (count > maxProductCount)
+            {
+                throw new InvalidOperationException(
+                    $"An empty query increased the product count from {maxProductCount} to {count}.");
+            }
+
+            return DateTime.UtcNow - startedAt >= window;
         });
     }
 

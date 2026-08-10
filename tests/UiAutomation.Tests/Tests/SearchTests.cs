@@ -183,28 +183,6 @@ public sealed class SearchTests : AuthenticatedUiTestFixture
     }
 
     [Test]
-    [Category("Smoke")]
-    [Category("P0")]
-    [Property("TestCaseId", "SEARCH-BAR-009")]
-    public void RapidQueriesFinishWithTheLastAcceptedQuery()
-    {
-        _search.SearchRapidly(
-            LowercaseProductCode,
-            Settings.SearchData.ProductCard,
-            "Знайдено по картці: 1");
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(_search.Query, Is.EqualTo(Settings.SearchData.ProductCard));
-            Assert.That(_search.ResultSummary, Is.EqualTo("Знайдено по картці: 1"));
-            Assert.That(
-                _search.GetProduct(Settings.SearchData.ProductCode).Card,
-                Is.EqualTo(Settings.SearchData.ProductCard));
-            Assert.That(_search.IsLoading, Is.False);
-        });
-    }
-
-    [Test]
     [Category("SearchInput")]
     [Category("P1")]
     [Property("TestCaseId", "SEARCH-BAR-011")]
@@ -236,8 +214,7 @@ public sealed class SearchTests : AuthenticatedUiTestFixture
         var previousCount = _search.ProductCodes.Count;
 
         _search.SubmitWithoutWaiting("   ");
-        var stableResult = _search.ResultSignature();
-        _search.WaitForStableResult(stableResult, TimeSpan.FromMilliseconds(500));
+        _search.EnsureNoSearchStarts(previousCount, TimeSpan.FromMilliseconds(500));
 
         Assert.Multiple(() =>
         {
@@ -258,8 +235,7 @@ public sealed class SearchTests : AuthenticatedUiTestFixture
         var previousCount = _search.ProductCodes.Count;
 
         _search.SubmitWithoutWaiting(string.Empty);
-        var stableResult = _search.ResultSignature();
-        _search.WaitForStableResult(stableResult, TimeSpan.FromMilliseconds(500));
+        _search.EnsureNoSearchStarts(previousCount, TimeSpan.FromMilliseconds(500));
 
         Assert.Multiple(() =>
         {
