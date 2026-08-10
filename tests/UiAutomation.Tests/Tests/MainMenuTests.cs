@@ -4,6 +4,21 @@ using UiAutomation.Tests.Pages;
 
 namespace UiAutomation.Tests.Tests;
 
+/// <summary>
+/// Главное меню авторизованной части: кнопка меню, раскрытие и сворачивание,
+/// состав разделов и пунктов, переход по каждому пункту и подменю ЕДО.
+/// Шесть методов дают 49 проверок — по одной на каждый пункт эталонного состава.
+/// </summary>
+/// <remarks>
+/// Набор помечен <see cref="TestCategories.ProductionSafe"/>: он только читает
+/// разметку и ходит по ссылкам, ничего не создавая и не меняя. Поэтому он же
+/// служит проверкой того, что боевой сервер вообще отвечает.
+///
+/// Одна сессия на всю фикстуру (<c>SingleInstance</c>): 49 отдельных входов
+/// на сайт сервер не выдерживает. Из-за этого проверки идут по одному и тому же
+/// браузеру, и каждая начинается с открытия меню — предыдущая могла увести
+/// на другую страницу или свернуть панель.
+/// </remarks>
 [TestFixture]
 [NonParallelizable]
 [FixtureLifeCycle(LifeCycle.SingleInstance)]
@@ -13,6 +28,7 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
 {
     private MainMenuPage _mainMenu = null!;
 
+    /// <summary>Заголовки, на которые разбито меню.</summary>
     private static readonly string[] MenuSections =
     [
         "Звіти",
@@ -20,6 +36,21 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
         "Інше"
     ];
 
+    /// <summary>
+    /// Эталонный состав меню: имя пункта и маршрут, на который он ведёт.
+    /// <c>null</c> вместо маршрута — у пункта нет ссылки, он только раскрывает
+    /// подменю, поэтому такой пункт проверяется на присутствие, но не на переход.
+    /// </summary>
+    /// <remarks>
+    /// «EДО» написано латинской <c>E</c> и кириллическими <c>ДО</c> — так оно
+    /// стоит в разметке сайта. Поиск идёт по точному совпадению текста ссылки,
+    /// поэтому «правка опечатки» на однородную кириллицу сломает и этот пункт,
+    /// и раскрытие подменю.
+    ///
+    /// Четыре пункта ведут на один и тот же <c>#/app/simplesearch</c> и по
+    /// маршруту неразличимы. Их различает <c>MainMenuPage</c>: перед кликом он
+    /// сверяет href самой ссылки, поэтому пункт, ведущий не туда, виден и здесь.
+    /// </remarks>
     private static readonly (string Name, string? Route)[] MenuItems =
     [
         ("Деб. заборгованість", "#/app/receivablesList"),
@@ -46,6 +77,7 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
         ("EДО", null)
     ];
 
+    /// <summary>Пункты, которые обязаны появиться после раскрытия «EДО».</summary>
     private static readonly string[] EdoMenuItems =
     [
         "Підписати ЕЦП",
@@ -54,10 +86,17 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
         "Запитання ЕДО"
     ];
 
+    /// <summary>
+    /// Все пункты меню для проверки присутствия. Имя случая задаётся вручную,
+    /// иначе в отчёте они различаются только номером аргумента.
+    /// </summary>
     public static IEnumerable<TestCaseData> MenuItemNames =>
         MenuItems.Select(item =>
             new TestCaseData(item.Name).SetName($"MenuContains_{item.Name}"));
 
+    /// <summary>
+    /// Только пункты со ссылкой — те, по которым есть куда переходить.
+    /// </summary>
     public static IEnumerable<TestCaseData> RoutedMenuItems =>
         MenuItems
             .Where(item => item.Route is not null)
@@ -70,6 +109,14 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
         _mainMenu = new MainMenuPage(Driver, Timeout);
     }
 
+    /// <summary>
+    /// Ручной сценарий: войти на сайт и осмотреть шапку.
+    /// Ожидаемый результат: кнопка главного меню на месте и доступна для нажатия.
+    /// </summary>
+    /// <remarks>
+    /// Проверка идёт первой намеренно: без этой кнопки меню не открыть, и все
+    /// остальные 48 проверок упали бы на ожидании разметки, не объясняя причины.
+    /// </remarks>
     [Test]
     [Category("Smoke")]
     public void MainMenuButtonIsDisplayedAfterLogin()
@@ -77,6 +124,14 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
         Assert.That(_mainMenu.IsMenuButtonDisplayed, Is.True);
     }
 
+    /// <summary>
+    /// Ручной сценарий: нажать кнопку меню, затем нажать её ещё раз.
+    /// Ожидаемый результат: панель раскрывается и сворачивается обратно.
+    /// </summary>
+    /// <remarks>
+    /// Раскрытость определяется по видимости первого пункта, а не по классам
+    /// панели: панель остаётся в разметке и свёрнутой, а пункт исчезает.
+    /// </remarks>
     [Test]
     [Category("Smoke")]
     public void MainMenuCanBeExpandedAndCollapsed()
@@ -88,6 +143,11 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
         Assert.That(_mainMenu.IsMenuExpanded, Is.False);
     }
 
+    /// <summary>
+    /// Ручной сценарий: раскрыть меню и найти в нём заголовок раздела.
+    /// Ожидаемый результат: раздел показан. Повторяется для «Звіти», «Журнали»
+    /// и «Інше».
+    /// </summary>
     [TestCaseSource(nameof(MenuSections))]
     [Category("Smoke")]
     public void MainMenuContainsExpectedSection(string sectionName)
@@ -98,6 +158,15 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
             $"Main menu section '{sectionName}' is not displayed.");
     }
 
+    /// <summary>
+    /// Ручной сценарий: раскрыть меню и найти в нём пункт.
+    /// Ожидаемый результат: пункт показан и доступен для нажатия. Повторяется
+    /// для всех 22 пунктов эталонного состава.
+    /// </summary>
+    /// <remarks>
+    /// Проверка отделена от перехода: пропавший пункт и пункт, ведущий не туда, —
+    /// разные дефекты, и по имени упавшего случая должно быть видно, какой из них.
+    /// </remarks>
     [TestCaseSource(nameof(MenuItemNames))]
     [Category("Smoke")]
     public void MainMenuContainsExpectedItem(string itemName)
@@ -108,6 +177,20 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
             $"Main menu item '{itemName}' is not displayed.");
     }
 
+    /// <summary>
+    /// Ручной сценарий: раскрыть меню и нажать пункт.
+    /// Ожидаемый результат: приложение переходит по маршруту этого пункта.
+    /// Повторяется для всех 21 пункта со ссылкой.
+    /// </summary>
+    /// <remarks>
+    /// Перед кликом <c>MainMenuPage</c> сверяет href ссылки с ожидаемым маршрутом
+    /// и падает с отдельным сообщением, если они разошлись. Без этого четыре
+    /// пункта, ведущие на общий <c>#/app/simplesearch</c>, прошли бы проверку
+    /// даже перепутанными между собой — по адресу они неразличимы.
+    ///
+    /// Клик ждёт исчезновения оверлея <c>block-ui-overlay</c>: пока приложение
+    /// грузит предыдущий раздел, нажатие перехватывается им, а не пунктом меню.
+    /// </remarks>
     [TestCaseSource(nameof(RoutedMenuItems))]
     [Category("Smoke")]
     public void MainMenuItemCanBeOpened(string itemName, string expectedRoute)
@@ -117,6 +200,19 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
         Assert.That(Driver.Url, Does.Contain(expectedRoute).IgnoreCase);
     }
 
+    /// <summary>
+    /// Ручной сценарий: раскрыть меню и нажать «EДО».
+    /// Ожидаемый результат: пункт раскрывается в подменю, и в нём видны все
+    /// четыре вложенных пункта.
+    /// </summary>
+    /// <remarks>
+    /// Раскрытость берётся из <c>aria-expanded</c> самого пункта, поэтому уже
+    /// раскрытое подменю не закрывается повторным кликом.
+    ///
+    /// Все четыре пункта проверяются одним <c>Assert.Multiple</c>, а не
+    /// отдельными случаями: подменю раскрывается один раз, и разбивать это
+    /// на четыре прохода означало бы четыре лишних открытия меню.
+    /// </remarks>
     [Test]
     [Category("Smoke")]
     public void EdoMenuCanBeExpanded()
