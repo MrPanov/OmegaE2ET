@@ -18,6 +18,13 @@ internal sealed class SearchBarComponent(IWebDriver driver, WebDriverWait wait)
 
     public bool IsUsable => Input.Displayed && Input.Enabled;
 
+    /// <summary>
+    /// Отрисована ли строка поиска. В отличие от <see cref="IsUsable"/> не ждёт
+    /// её появления — нужна для быстрой проверки, загрузилась ли страница вообще.
+    /// </summary>
+    public bool IsRendered => driver.FindElements(SearchInputBy)
+        .Any(element => element.Displayed && element.Enabled);
+
     public bool IsLoading => driver.IsVisible(BlockingOverlayBy);
 
     public bool IsStartsWithEnabled => driver.FindElement(StartsWithCheckboxBy).Selected;

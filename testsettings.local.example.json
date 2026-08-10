@@ -19,7 +19,10 @@
         "latinExpectedText": "LANOS",
         "punctuatedProductCode": "23.129.02",
         "missingProductQuery": "zz-no-product-987654321",
-        "searchPlaceholder": "VIN, Держ. номер, OE, найменування, картка, код"
+        "searchPlaceholder": "VIN, Держ. номер, OE, найменування, картка, код",
+        "brandQuery": "Фільтр оливний KNECHT-MAHLE",
+        "vin": "WBSJF0C54JB283303",
+        "licensePlate": "ке0666ан"
       }
     },
     "Production": {
@@ -39,7 +42,10 @@
         "latinExpectedText": "<production latin expected text>",
         "punctuatedProductCode": "<production punctuated product code>",
         "missingProductQuery": "<production missing product query>",
-        "searchPlaceholder": "<production search placeholder>"
+        "searchPlaceholder": "<production search placeholder>",
+        "brandQuery": "<production brand query>",
+        "vin": "<production VIN>",
+        "licensePlate": "<production license plate>"
       }
     }
   }

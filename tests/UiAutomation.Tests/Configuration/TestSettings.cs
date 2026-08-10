@@ -38,9 +38,15 @@ public sealed record SearchTestData(
     string LatinExpectedText,
     string PunctuatedProductCode,
     string MissingProductQuery,
-    string SearchPlaceholder)
+    string SearchPlaceholder,
+    string BrandQuery,
+    string Vin,
+    string LicensePlate)
 {
     public static SearchTestData Empty { get; } = new(
+        string.Empty,
+        string.Empty,
+        string.Empty,
         string.Empty,
         string.Empty,
         string.Empty,
@@ -71,6 +77,9 @@ public sealed record SearchTestData(
             LatinExpectedText,
             PunctuatedProductCode,
             MissingProductQuery,
-            SearchPlaceholder
+            SearchPlaceholder,
+            BrandQuery,
+            Vin,
+            LicensePlate
         }.All(TestSettings.IsConfigured);
 }

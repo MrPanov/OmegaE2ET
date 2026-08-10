@@ -14,6 +14,11 @@ public sealed class SearchResultsPage
     private readonly IWebDriver _driver;
     private readonly WebDriverWait _wait;
     private readonly TimeSpan _minimumSearchInterval;
+
+    /// <summary>Половина общего ожидания: две попытки открыть страницу не должны
+    /// суммарно превышать бюджет, заданный в настройках.</summary>
+    private readonly TimeSpan _pageAttemptTimeout;
+
     private readonly SearchBarComponent _bar;
     private readonly SearchHistoryComponent _history;
     private readonly SearchResultComponent _results;
@@ -28,6 +33,8 @@ public sealed class SearchResultsPage
         _driver = driver;
         _wait = new WebDriverWait(driver, waitTimeout);
         _minimumSearchInterval = minimumSearchInterval;
+        _pageAttemptTimeout = TimeSpan.FromMilliseconds(
+            Math.Max(1000, waitTimeout.TotalMilliseconds / 2));
         _bar = new SearchBarComponent(driver, _wait);
         _history = new SearchHistoryComponent(driver, _wait);
         _results = new SearchResultComponent(driver, _wait);
@@ -62,11 +69,52 @@ public sealed class SearchResultsPage
 
     public void Reset(string baseUrl)
     {
-        _driver.Navigate().GoToUrl(baseUrl);
-        WaitUntilPageIsReady();
+        OpenPage(baseUrl);
         _history.Close();
         _bar.SetStartsWith(false);
         _bar.ReplaceQuery(string.Empty);
+    }
+
+    /// <summary>
+    /// Открывает страницу поиска, при неудаче перезагружая её один раз.
+    /// </summary>
+    /// <remarks>
+    /// Приложение изредка не отрисовывается вовсе — страница остаётся пустой.
+    /// Одна перезагрузка это лечит. Если не помогла и она, сбой описывается
+    /// отдельным сообщением: иначе неподнявшаяся страница выглядит как падение
+    /// самой проверки и портит статистику прогона.
+    /// </remarks>
+    private void OpenPage(string baseUrl)
+    {
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            if (attempt == 1)
+            {
+                _driver.Navigate().GoToUrl(baseUrl);
+            }
+            else
+            {
+                _driver.Navigate().Refresh();
+            }
+
+            try
+            {
+                new WebDriverWait(_driver, _pageAttemptTimeout).Until(_ =>
+                {
+                    _results.ThrowIfRateLimited();
+                    return _bar.IsRendered;
+                });
+                WaitUntilPageIsReady();
+                return;
+            }
+            catch (WebDriverTimeoutException) when (attempt == 1)
+            {
+            }
+        }
+
+        throw new WebDriverTimeoutException(
+            "Search page did not render even after a reload — the environment failed, " +
+            $"not the scenario. Current URL: '{_driver.Url}'. Page title: '{_driver.Title}'.");
     }
 
     public void Search(string query)

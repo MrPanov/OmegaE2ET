@@ -20,7 +20,10 @@ internal static class TestSettingsLoader
         LatinExpectedText: "LANOS",
         PunctuatedProductCode: "23.129.02",
         MissingProductQuery: "zz-no-product-987654321",
-        SearchPlaceholder: "VIN, Держ. номер, OE, найменування, картка, код");
+        SearchPlaceholder: "VIN, Держ. номер, OE, найменування, картка, код",
+        BrandQuery: "Фільтр оливний KNECHT-MAHLE",
+        Vin: "WBSJF0C54JB283303",
+        LicensePlate: "ке0666ан");
 
     /// <summary>
     /// Всё, что отличает одну среду от другой. Собрано в одном месте, чтобы
@@ -213,7 +216,10 @@ internal static class TestSettingsLoader
             LatinExpectedText: Field("LATIN_EXPECTED_TEXT", local?.LatinExpectedText, fallback.LatinExpectedText),
             PunctuatedProductCode: Field("PUNCTUATED_PRODUCT_CODE", local?.PunctuatedProductCode, fallback.PunctuatedProductCode),
             MissingProductQuery: Field("MISSING_PRODUCT_QUERY", local?.MissingProductQuery, fallback.MissingProductQuery),
-            SearchPlaceholder: Field("PLACEHOLDER", local?.SearchPlaceholder, fallback.SearchPlaceholder));
+            SearchPlaceholder: Field("PLACEHOLDER", local?.SearchPlaceholder, fallback.SearchPlaceholder),
+            BrandQuery: Field("BRAND_QUERY", local?.BrandQuery, fallback.BrandQuery),
+            Vin: Field("VIN", local?.Vin, fallback.Vin),
+            LicensePlate: Field("LICENSE_PLATE", local?.LicensePlate, fallback.LicensePlate));
     }
 
     private static bool GetBool(
@@ -365,4 +371,7 @@ internal sealed record LocalSearchTestData(
     string? LatinExpectedText,
     string? PunctuatedProductCode,
     string? MissingProductQuery,
-    string? SearchPlaceholder);
+    string? SearchPlaceholder,
+    string? BrandQuery = null,
+    string? Vin = null,
+    string? LicensePlate = null);
