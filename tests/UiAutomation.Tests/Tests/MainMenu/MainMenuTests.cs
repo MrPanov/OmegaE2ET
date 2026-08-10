@@ -6,18 +6,22 @@ namespace UiAutomation.Tests.Tests.MainMenu;
 
 /// <summary>
 /// Главное меню авторизованной части: кнопка меню, раскрытие и сворачивание,
-/// состав разделов и пунктов, переход по каждому пункту и подменю ЕДО.
-/// Шесть методов дают 49 проверок — по одной на каждый пункт эталонного состава.
+/// состав разделов и пунктов, переход по каждому пункту.
 /// </summary>
 /// <remarks>
 /// Набор помечен <see cref="TestCategories.ProductionSafe"/>: он только читает
 /// разметку и ходит по ссылкам, ничего не создавая и не меняя. Поэтому он же
 /// служит проверкой того, что боевой сервер вообще отвечает.
 ///
-/// Одна сессия на всю фикстуру (<c>SingleInstance</c>): 49 отдельных входов
-/// на сайт сервер не выдерживает. Из-за этого проверки идут по одному и тому же
+/// Одна сессия на всю фикстуру (<c>SingleInstance</c>): отдельный вход на каждую
+/// проверку сервер не выдерживает. Из-за этого проверки идут по одному и тому же
 /// браузеру, и каждая начинается с открытия меню — предыдущая могла увести
 /// на другую страницу или свернуть панель.
+///
+/// Пункты проверяются оптом, а не по случаю на каждый: это общая проверка того,
+/// что меню в целом работает. Разбор отдельных разделов появится собственными
+/// наборами, когда до них дойдут руки, и там проверять будут уже содержимое
+/// открывшейся страницы, а не сам факт перехода.
 /// </remarks>
 [TestFixture]
 [NonParallelizable]
@@ -27,8 +31,13 @@ namespace UiAutomation.Tests.Tests.MainMenu;
 public sealed class MainMenuTests : AuthenticatedUiTestFixture
 {
     private MainMenuPage _mainMenu = null!;
+    private AppTabs _tabs = null!;
 
     /// <summary>Заголовки, на которые разбито меню.</summary>
+    /// <remarks>
+    /// В разметке есть и четвёртый заголовок, «Адмін», но он и его пункты
+    /// скрыты для обычной учётной записи, поэтому в эталон не входят.
+    /// </remarks>
     private static readonly string[] MenuSections =
     [
         "Звіти",
@@ -38,20 +47,34 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
 
     /// <summary>
     /// Эталонный состав меню: имя пункта и маршрут, на который он ведёт.
-    /// <c>null</c> вместо маршрута — у пункта нет ссылки, он только раскрывает
-    /// подменю, поэтому такой пункт проверяется на присутствие, но не на переход.
+    /// Закомментированные строки — пункты, которые в меню есть, но проверять их
+    /// решено не здесь; состав оставлен записанным, чтобы их не пришлось искать
+    /// заново.
     /// </summary>
     /// <remarks>
-    /// «EДО» написано латинской <c>E</c> и кириллическими <c>ДО</c> — так оно
-    /// стоит в разметке сайта. Поиск идёт по точному совпадению текста ссылки,
-    /// поэтому «правка опечатки» на однородную кириллицу сломает и этот пункт,
-    /// и раскрытие подменю.
+    /// Список ограничен тем, что видит учётная запись прогона. В самой панели
+    /// лежит вдвое больше ссылок: раздел «Адмін» (24 пункта), подменю «Autodoc»
+    /// (6 пунктов), «Ваші акції» <c>#/app/bonus</c>, «Звіт та донати козака»
+    /// <c>#/app/donationReport</c>, «Редактор The power of motion»
+    /// <c>#/app/powerEditor</c>. Все они есть в разметке, но скрыты по правам —
+    /// проверено на живом сайте под учётной записью прогона. Поэтому обход идёт
+    /// по списку, а не по всем ссылкам панели подряд: иначе набор ломился бы
+    /// в чужие страницы и падал бы на правах, а не на дефектах меню.
+    ///
+    /// Под учётной записью с большими правами эти пункты видны. Если такой набор
+    /// понадобится, заводить его надо отдельной фикстурой со своим списком,
+    /// а не расширением этого: здесь состав обязан совпадать с правами того,
+    /// кем ходит прогон.
+    ///
+    /// Маршруты записаны без UUID: у половины пунктов href выглядит как
+    /// <c>#/app/receivablesList/06a8f93c-…</c>, и этот UUID меняется от загрузки
+    /// к загрузке. Проверяется только устойчивая часть.
     ///
     /// Четыре пункта ведут на один и тот же <c>#/app/simplesearch</c> и по
     /// маршруту неразличимы. Их различает <c>MainMenuPage</c>: перед кликом он
     /// сверяет href самой ссылки, поэтому пункт, ведущий не туда, виден и здесь.
     /// </remarks>
-    private static readonly (string Name, string? Route)[] MenuItems =
+    private static readonly (string Name, string Route)[] MenuItems =
     [
         ("Деб. заборгованість", "#/app/receivablesList"),
         ("Взаєморозрахунки", "#/app/mutualSettlementsList"),
@@ -71,42 +94,33 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
         ("Зворотний звʼязок", "#/app/ticket"),
         ("Запити", "#/app/requestList"),
         ("Аукціон", "#/app/auction"),
-        ("Кошик повернень", "#/app/claimsBasket"),
-        ("Прайс-листи", "#/app/prices"),
-        ("Документи", "#/app/documents"),
-        ("EДО", null)
-    ];
+        ("Кошик повернень", "#/app/claimsBasket")
 
-    /// <summary>Пункты, которые обязаны появиться после раскрытия «EДО».</summary>
-    private static readonly string[] EdoMenuItems =
-    [
-        "Підписати ЕЦП",
-        "Підключення до ЕДО",
-        "Проблема з ЕДО",
-        "Запитання ЕДО"
+        // Проверять здесь не нужно — решение владельца набора.
+        // ("Прайс-листи", "#/app/prices"),
+        // ("Документи", "#/app/documents"),
+        //
+        // «EДО» ссылки не имеет вовсе: это dropdown-toggle с javascript:void(0);,
+        // раскрывающий четыре вложенных пункта — «Підписати ЕЦП»,
+        // «Підключення до ЕДО», «Проблема з ЕДО», «Запитання ЕДО». У них тоже
+        // нет href, переход вешает обработчик. Написано латинской E
+        // и кириллическими ДО — так стоит в разметке сайта.
+        // ("EДО", null)
     ];
 
     /// <summary>
-    /// Все пункты меню для проверки присутствия. Имя случая задаётся вручную,
-    /// иначе в отчёте они различаются только номером аргумента.
-    /// </summary>
-    public static IEnumerable<TestCaseData> MenuItemNames =>
-        MenuItems.Select(item =>
-            new TestCaseData(item.Name).SetName($"MenuContains_{item.Name}"));
-
-    /// <summary>
-    /// Только пункты со ссылкой — те, по которым есть куда переходить.
+    /// Пункты для обхода, по случаю на каждый. Имя случая задаётся вручную:
+    /// иначе они различаются в отчёте только номером аргумента, и отдельный
+    /// пункт не запустить фильтром.
     /// </summary>
     public static IEnumerable<TestCaseData> RoutedMenuItems =>
-        MenuItems
-            .Where(item => item.Route is not null)
-            .Select(item =>
-                new TestCaseData(item.Name, item.Route!)
-                    .SetName($"MenuOpens_{item.Name}"));
+        MenuItems.Select(item =>
+            new TestCaseData(item.Name, item.Route).SetName($"MenuOpens_{item.Name}"));
 
     protected override void OnAuthenticated()
     {
         _mainMenu = new MainMenuPage(Driver, Timeout);
+        _tabs = new AppTabs(Driver, Timeout);
     }
 
     /// <summary>
@@ -115,7 +129,7 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
     /// </summary>
     /// <remarks>
     /// Проверка идёт первой намеренно: без этой кнопки меню не открыть, и все
-    /// остальные 48 проверок упали бы на ожидании разметки, не объясняя причины.
+    /// остальные упали бы на ожидании разметки, не объясняя причины.
     /// </remarks>
     [Test]
     [Category("Smoke")]
@@ -130,7 +144,8 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
     /// </summary>
     /// <remarks>
     /// Раскрытость определяется по видимости первого пункта, а не по классам
-    /// панели: панель остаётся в разметке и свёрнутой, а пункт исчезает.
+    /// панели: свёрнутая панель остаётся в разметке, у неё лишь добавляется
+    /// <c>ng-hide</c>, а пункты перестают отрисовываться.
     /// </remarks>
     [Test]
     [Category("Smoke")]
@@ -144,90 +159,84 @@ public sealed class MainMenuTests : AuthenticatedUiTestFixture
     }
 
     /// <summary>
-    /// Ручной сценарий: раскрыть меню и найти в нём заголовок раздела.
-    /// Ожидаемый результат: раздел показан. Повторяется для «Звіти», «Журнали»
-    /// и «Інше».
-    /// </summary>
-    [TestCaseSource(nameof(MenuSections))]
-    [Category("Smoke")]
-    public void MainMenuContainsExpectedSection(string sectionName)
-    {
-        Assert.That(
-            _mainMenu.IsSectionDisplayed(sectionName),
-            Is.True,
-            $"Main menu section '{sectionName}' is not displayed.");
-    }
-
-    /// <summary>
-    /// Ручной сценарий: раскрыть меню и найти в нём пункт.
-    /// Ожидаемый результат: пункт показан и доступен для нажатия. Повторяется
-    /// для всех 22 пунктов эталонного состава.
+    /// Ручной сценарий: раскрыть меню и сверить его состав с эталонным.
+    /// Ожидаемый результат: показаны все три раздела и все 19 проверяемых пунктов.
     /// </summary>
     /// <remarks>
-    /// Проверка отделена от перехода: пропавший пункт и пункт, ведущий не туда, —
-    /// разные дефекты, и по имени упавшего случая должно быть видно, какой из них.
-    /// </remarks>
-    [TestCaseSource(nameof(MenuItemNames))]
-    [Category("Smoke")]
-    public void MainMenuContainsExpectedItem(string itemName)
-    {
-        Assert.That(
-            _mainMenu.IsMenuItemDisplayed(itemName),
-            Is.True,
-            $"Main menu item '{itemName}' is not displayed.");
-    }
-
-    /// <summary>
-    /// Ручной сценарий: раскрыть меню и нажать пункт.
-    /// Ожидаемый результат: приложение переходит по маршруту этого пункта.
-    /// Повторяется для всех 21 пункта со ссылкой.
-    /// </summary>
-    /// <remarks>
-    /// Перед кликом <c>MainMenuPage</c> сверяет href ссылки с ожидаемым маршрутом
-    /// и падает с отдельным сообщением, если они разошлись. Без этого четыре
-    /// пункта, ведущие на общий <c>#/app/simplesearch</c>, прошли бы проверку
-    /// даже перепутанными между собой — по адресу они неразличимы.
-    ///
-    /// Клик ждёт исчезновения оверлея <c>block-ui-overlay</c>: пока приложение
-    /// грузит предыдущий раздел, нажатие перехватывается им, а не пунктом меню.
-    /// </remarks>
-    [TestCaseSource(nameof(RoutedMenuItems))]
-    [Category("Smoke")]
-    public void MainMenuItemCanBeOpened(string itemName, string expectedRoute)
-    {
-        _mainMenu.OpenMenuItem(itemName, expectedRoute);
-
-        Assert.That(Driver.Url, Does.Contain(expectedRoute).IgnoreCase);
-    }
-
-    /// <summary>
-    /// Ручной сценарий: раскрыть меню и нажать «EДО».
-    /// Ожидаемый результат: пункт раскрывается в подменю, и в нём видны все
-    /// четыре вложенных пункта.
-    /// </summary>
-    /// <remarks>
-    /// Раскрытость берётся из <c>aria-expanded</c> самого пункта, поэтому уже
-    /// раскрытое подменю не закрывается повторным кликом.
-    ///
-    /// Все четыре пункта проверяются одним <c>Assert.Multiple</c>, а не
-    /// отдельными случаями: подменю раскрывается один раз, и разбивать это
-    /// на четыре прохода означало бы четыре лишних открытия меню.
+    /// Присутствие отделено от перехода: пропавший пункт и пункт, ведущий не
+    /// туда, — разные дефекты, и по тому, какая из двух проверок упала, сразу
+    /// видно, какой именно.
     /// </remarks>
     [Test]
     [Category("Smoke")]
-    public void EdoMenuCanBeExpanded()
+    public void MainMenuShowsEverySectionAndItem()
     {
-        _mainMenu.OpenSubmenu("EДО");
+        var missingSections = MenuSections
+            .Where(section => !_mainMenu.IsSectionDisplayed(section))
+            .ToArray();
+        var missingItems = MenuItems
+            .Where(item => !_mainMenu.IsMenuItemDisplayed(item.Name))
+            .Select(item => item.Name)
+            .ToArray();
 
         Assert.Multiple(() =>
         {
-            foreach (var itemName in EdoMenuItems)
-            {
-                Assert.That(
-                    _mainMenu.IsSubmenuItemDisplayed(itemName),
-                    Is.True,
-                    $"EДО submenu item '{itemName}' is not displayed.");
-            }
+            Assert.That(
+                missingSections,
+                Is.Empty,
+                $"Разделы меню не показаны: {string.Join(", ", missingSections)}.");
+            Assert.That(
+                missingItems,
+                Is.Empty,
+                $"Пункты меню не показаны: {string.Join(", ", missingItems)}.");
         });
+    }
+
+    /// <summary>
+    /// Ручной сценарий: раскрыть меню, нажать пункт, убедиться, что открылся его
+    /// раздел, и закрыть вкладку раздела.
+    /// Ожидаемый результат: пункт уводит на свой маршрут, а его вкладка после
+    /// закрытия исчезает из панели. Повторяется для каждого проверяемого пункта.
+    /// </summary>
+    /// <remarks>
+    /// По случаю на пункт, а не единым обходом: так падение одного пункта видно
+    /// по имени прямо в отчёте, а отдельный пункт можно прогнать фильтром —
+    /// <c>--filter "FullyQualifiedName~MenuOpens_Заявки"</c>. Вход всё равно один
+    /// на всю фикстуру, лишних сессий это не создаёт.
+    ///
+    /// Проверка того, что открылось, ограничена маршрутом: содержимое каждого
+    /// раздела — предмет отдельных наборов, которые появятся позже. Здесь
+    /// отвечают только на вопрос «работают ли пункты меню».
+    ///
+    /// Клик ждёт исчезновения <c>block-ui-overlay</c>: пока приложение грузит
+    /// предыдущий раздел, нажатие перехватывает оверлей, а не пункт меню.
+    ///
+    /// Вкладка закрывается сразу после проверки и её закрытие сверяется по числу
+    /// вкладок. Приложение держит вкладки на сервере, привязанными к учётной
+    /// записи: незакрытая вкладка переживает не только соседние проверки,
+    /// но и весь прогон, и следующий прогон споткнётся уже об неё. Проверено
+    /// на живом сайте — раздел, открытый в чужой сессии того же пользователя,
+    /// в сессии прогона не открывается вовсе, и ожидание адреса выходит
+    /// по таймауту.
+    /// </remarks>
+    [TestCaseSource(nameof(RoutedMenuItems))]
+    [Category("Smoke")]
+    public void MenuItemOpensItsSection(string itemName, string expectedRoute)
+    {
+        var tabsBeforeOpen = _tabs.Count;
+
+        _mainMenu.OpenMenuItem(itemName, expectedRoute);
+
+        Assert.That(
+            Driver.Url,
+            Does.Contain(expectedRoute).IgnoreCase,
+            $"Пункт «{itemName}» не открыл свой раздел.");
+
+        _tabs.CloseActive();
+
+        Assert.That(
+            _tabs.Count,
+            Is.EqualTo(tabsBeforeOpen),
+            $"Вкладка раздела «{itemName}» осталась открытой.");
     }
 }

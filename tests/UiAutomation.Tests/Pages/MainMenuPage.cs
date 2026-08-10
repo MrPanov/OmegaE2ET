@@ -4,15 +4,28 @@ using UiAutomation.Tests.Infrastructure;
 
 namespace UiAutomation.Tests.Pages;
 
+/// <summary>
+/// Панель главного меню — <c>div.side-menu</c>, раскрываемая кнопкой в шапке.
+/// </summary>
+/// <remarks>
+/// Все поиски ограничены этой панелью намеренно. В разметке страницы те же
+/// подписи встречаются ещё в трёх местах: во второй, мобильной копии меню
+/// (<c>div.mobile_menu</c>, скрытой на десктопе), в выпадающем списке
+/// «Каталоги» — там есть свой раздел «Інше» — и в подвале страницы, где лежат
+/// «Контакти». Незаземлённый поиск по всей странице нашёл бы их и выдал
+/// отсутствующий пункт меню за присутствующий.
+/// </remarks>
 public sealed class MainMenuPage(IWebDriver driver, TimeSpan waitTimeout)
 {
     private readonly WebDriverWait _wait = new(driver, waitTimeout);
+
+    private const string SideMenuPath = "//div[contains(@class,'side-menu')]";
 
     private static readonly By MenuButtonBy =
         By.CssSelector("a.wrapper-tab-link.menu-button");
 
     private static readonly By VisibleMenuMarkerBy =
-        By.XPath("//a[normalize-space(.)='Деб. заборгованість']");
+        By.XPath($"{SideMenuPath}//a[normalize-space(.)='Деб. заборгованість']");
 
     private static readonly By BlockingOverlayBy =
         By.CssSelector("div.block-ui-overlay");
@@ -49,7 +62,8 @@ public sealed class MainMenuPage(IWebDriver driver, TimeSpan waitTimeout)
     {
         OpenMenu();
         return driver.FindElements(By.XPath(
-                $"//*[normalize-space(.)={XPathHelpers.Literal(sectionName)}]"))
+                $"{SideMenuPath}//div[contains(@class,'side-menu-title')]" +
+                $"[normalize-space(.)={XPathHelpers.Literal(sectionName)}]"))
             .Any(element => element.Displayed);
     }
 
@@ -70,32 +84,6 @@ public sealed class MainMenuPage(IWebDriver driver, TimeSpan waitTimeout)
 
         _wait.Until(d =>
             d.Url.Contains(expectedRoute, StringComparison.OrdinalIgnoreCase));
-    }
-
-    public void OpenSubmenu(string itemName)
-    {
-        OpenMenu();
-        var item = VisibleMenuItem(itemName);
-
-        if (!string.Equals(
-                item.GetAttribute("aria-expanded"),
-                "true",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            ClickWhenPageIsReady(MenuItemBy(itemName));
-        }
-
-        _wait.Until(_ => string.Equals(
-            VisibleMenuItem(itemName).GetAttribute("aria-expanded"),
-            "true",
-            StringComparison.OrdinalIgnoreCase));
-    }
-
-    public bool IsSubmenuItemDisplayed(string itemName)
-    {
-        return driver.FindElements(By.XPath(
-                $"//*[normalize-space(.)={XPathHelpers.Literal(itemName)}]"))
-            .Any(element => element.Displayed);
     }
 
     private IWebElement VisibleMenuItem(string itemName) => _wait.Until(d =>
@@ -142,6 +130,11 @@ public sealed class MainMenuPage(IWebDriver driver, TimeSpan waitTimeout)
         }
     }
 
+    /// <summary>
+    /// Пункт меню ищется по точному тексту ссылки внутри панели: у пунктов нет
+    /// ни идентификаторов, ни собственных классов, а href у половины содержит
+    /// UUID аккаунта, который меняется от загрузки к загрузке.
+    /// </summary>
     private static By MenuItemBy(string itemName) =>
-        By.XPath($"//a[normalize-space(.)={XPathHelpers.Literal(itemName)}]");
+        By.XPath($"{SideMenuPath}//a[normalize-space(.)={XPathHelpers.Literal(itemName)}]");
 }
