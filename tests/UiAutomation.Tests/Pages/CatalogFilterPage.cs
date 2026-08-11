@@ -12,14 +12,12 @@ public sealed class CatalogFilterPage
 {
     private readonly CatalogFacetsComponent _facets;
     private readonly CatalogResultsComponent _results;
-    private readonly DomMutationTracker _mutations;
 
     public CatalogFilterPage(IWebDriver driver, TimeSpan waitTimeout)
     {
         var wait = new WebDriverWait(driver, waitTimeout);
         _facets = new CatalogFacetsComponent(driver, wait);
         _results = new CatalogResultsComponent(driver, wait);
-        _mutations = new DomMutationTracker(driver);
     }
 
     public IReadOnlyList<string> ProductCodes => _results.ProductCodes;
@@ -96,12 +94,9 @@ public sealed class CatalogFilterPage
         bool requireResultChange = true)
     {
         var previousSignature = ResultSignature;
-        var mutationVersion = _mutations.Snapshot();
         _facets.Apply();
         _results.WaitForChangedAndSettled(
             previousSignature,
-            _mutations,
-            mutationVersion,
             requireResultChange,
             expectedAppliedFilter);
     }
@@ -109,12 +104,9 @@ public sealed class CatalogFilterPage
     public void ResetFilters()
     {
         var previousSignature = ResultSignature;
-        var mutationVersion = _mutations.Snapshot();
         _facets.Reset();
         _results.WaitForChangedAndSettled(
             previousSignature,
-            _mutations,
-            mutationVersion,
             requireResultChange: true);
     }
 }

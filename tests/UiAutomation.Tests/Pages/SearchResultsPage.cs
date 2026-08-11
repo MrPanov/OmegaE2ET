@@ -22,7 +22,6 @@ public sealed class SearchResultsPage
     private readonly SearchBarComponent _bar;
     private readonly SearchHistoryComponent _history;
     private readonly SearchResultComponent _results;
-    private readonly DomMutationTracker _mutations;
     private DateTime _lastSearchStartedUtc = DateTime.MinValue;
 
     public SearchResultsPage(
@@ -38,7 +37,6 @@ public sealed class SearchResultsPage
         _bar = new SearchBarComponent(driver, _wait);
         _history = new SearchHistoryComponent(driver, _wait);
         _results = new SearchResultComponent(driver, _wait);
-        _mutations = new DomMutationTracker(driver);
     }
 
     public bool SupportsPerformanceLog => _driver is ChromiumDriver;
@@ -122,9 +120,9 @@ public sealed class SearchResultsPage
         WaitUntilPageIsReady();
         _bar.ReplaceQuery(query);
         WaitForSearchSlot();
-        var mutationVersion = _mutations.Snapshot();
+        var requestCheckpoint = _driver.CaptureAngularRequestCheckpoint();
         _bar.Input.SendKeys(Keys.Enter);
-        WaitForSearchCompletion(query, mutationVersion, requireQueryMatch: false);
+        WaitForSearchCompletion(query, requestCheckpoint, requireQueryMatch: false);
     }
 
     public void TypeQuery(string query)
@@ -204,9 +202,9 @@ public sealed class SearchResultsPage
     {
         var item = _history.Item(query);
         WaitForSearchSlot();
-        var mutationVersion = _mutations.Snapshot();
+        var requestCheckpoint = _driver.CaptureAngularRequestCheckpoint();
         item.Click();
-        WaitForSearchCompletion(query, mutationVersion, requireQueryMatch: true);
+        WaitForSearchCompletion(query, requestCheckpoint, requireQueryMatch: true);
     }
 
     public void ClearPerformanceLog()
@@ -257,9 +255,9 @@ public sealed class SearchResultsPage
         new Actions(_driver).KeyDown(Keys.Control).SendKeys("v").KeyUp(Keys.Control).Perform();
         _wait.Until(_ => string.Equals(Query, query, StringComparison.Ordinal));
         WaitForSearchSlot();
-        var mutationVersion = _mutations.Snapshot();
+        var requestCheckpoint = _driver.CaptureAngularRequestCheckpoint();
         _bar.Input.SendKeys(Keys.Enter);
-        WaitForSearchCompletion(query, mutationVersion, requireQueryMatch: true);
+        WaitForSearchCompletion(query, requestCheckpoint, requireQueryMatch: true);
     }
 
     public bool HasCompletedOutcome() => _results.HasCompletedOutcome;
@@ -272,10 +270,12 @@ public sealed class SearchResultsPage
 
     private void WaitForSearchCompletion(
         string expectedQuery,
-        long mutationVersion,
+        long requestCheckpoint,
         string? expectedSummary = null,
         bool requireQueryMatch = false)
     {
+        _driver.WaitUntilAngularRequestsCompleteAfter(requestCheckpoint, _wait.Timeout);
+
         string? lastSignature = null;
         DateTime? stableSince = null;
 
@@ -284,7 +284,6 @@ public sealed class SearchResultsPage
             _results.ThrowIfRateLimited();
             if (_bar.IsLoading ||
                 !_results.HasCompletedOutcome ||
-                !_mutations.HasChangedSince(mutationVersion) ||
                 (requireQueryMatch &&
                  !string.Equals(Query, expectedQuery, StringComparison.Ordinal)))
             {

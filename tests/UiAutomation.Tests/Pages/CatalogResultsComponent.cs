@@ -69,8 +69,6 @@ internal sealed class CatalogResultsComponent(IWebDriver driver, WebDriverWait w
 
     public void WaitForChangedAndSettled(
         string previousSignature,
-        DomMutationTracker mutations,
-        long version,
         bool requireResultChange,
         string? expectedAppliedFilter = null)
     {
@@ -81,7 +79,7 @@ internal sealed class CatalogResultsComponent(IWebDriver driver, WebDriverWait w
         {
             wait.Until(d =>
             {
-                if (d.IsVisible(OverlayBy) || !mutations.HasChangedSince(version))
+                if (d.IsVisible(OverlayBy))
                 {
                     lastSignature = null;
                     stableSince = null;

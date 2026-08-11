@@ -5,6 +5,8 @@ namespace UiAutomation.Tests.Infrastructure;
 
 internal static class WebDriverExtensions
 {
+    private static readonly TimeSpan AngularIdleSettleTime = TimeSpan.FromMilliseconds(200);
+
     /// <summary>
     /// Оверлей, которым приложение закрывает страницу на время загрузки раздела.
     /// </summary>
@@ -26,6 +28,25 @@ internal static class WebDriverExtensions
         """;
 
     /// <summary>
+    /// Устанавливает счётчик XHR-запросов до действия, которое должно запустить
+    /// Angular <c>$http</c>. Сам <c>pendingRequests</c> показывает только запросы,
+    /// активные прямо сейчас, поэтому без такого счётчика быстрый запрос можно
+    /// целиком пропустить между двумя опросами WebDriver.
+    /// </summary>
+    private const string EnsureRequestCounterScript = """
+        if (!window.__omegaE2eRequestCounter) {
+          var counter = { started: 0 };
+          var originalSend = XMLHttpRequest.prototype.send;
+          XMLHttpRequest.prototype.send = function () {
+            counter.started++;
+            return originalSend.apply(this, arguments);
+          };
+          window.__omegaE2eRequestCounter = counter;
+        }
+        return window.__omegaE2eRequestCounter.started;
+        """;
+
+    /// <summary>
     /// Ждёт, пока приложение догрузит текущий раздел: снимет оверлей загрузки
     /// и завершит все запросы страницы.
     /// </summary>
@@ -40,10 +61,61 @@ internal static class WebDriverExtensions
         new WebDriverWait(driver, timeout).Until(d =>
             !d.IsVisible(BlockingOverlayBy) && d.PendingRequestCount() == 0);
 
+    /// <summary>
+    /// Ставит контрольную точку перед действием, которое должно отправить
+    /// Angular-запрос. Контрольная точка позволяет отличить новый запрос от уже
+    /// готового состояния страницы.
+    /// </summary>
+    public static long CaptureAngularRequestCheckpoint(this IWebDriver driver) =>
+        driver.StartedRequestCount();
+
+    /// <summary>
+    /// Ждёт, пока после контрольной точки начнётся хотя бы один новый XHR-запрос,
+    /// Angular завершит все запросы и страница останется без загрузки в течение
+    /// короткого стабильного окна.
+    /// </summary>
+    public static void WaitUntilAngularRequestsCompleteAfter(
+        this IWebDriver driver,
+        long checkpoint,
+        TimeSpan timeout)
+    {
+        long? lastStartedCount = null;
+        DateTime? idleSince = null;
+
+        new WebDriverWait(driver, timeout).Until(d =>
+        {
+            var startedCount = d.StartedRequestCount();
+            if (startedCount <= checkpoint ||
+                d.PendingRequestCount() > 0 ||
+                d.IsVisible(BlockingOverlayBy))
+            {
+                lastStartedCount = startedCount;
+                idleSince = null;
+                return false;
+            }
+
+            if (lastStartedCount != startedCount)
+            {
+                lastStartedCount = startedCount;
+                idleSince = DateTime.UtcNow;
+                return false;
+            }
+
+            idleSince ??= DateTime.UtcNow;
+            return DateTime.UtcNow - idleSince >= AngularIdleSettleTime;
+        });
+    }
+
     private static long PendingRequestCount(this IWebDriver driver)
     {
         var pending = ((IJavaScriptExecutor)driver).ExecuteScript(PendingRequestCountScript);
         return pending is long count ? count : 0;
+    }
+
+    private static long StartedRequestCount(this IWebDriver driver)
+    {
+        var started = ((IJavaScriptExecutor)driver).ExecuteScript(EnsureRequestCounterScript);
+        return Convert.ToInt64(started, System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <summary>
