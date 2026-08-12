@@ -23,7 +23,10 @@ public static class DriverFactory
 
         driver.Manage().Timeouts().ImplicitWait = TimeSpan.Zero;
         driver.Manage().Timeouts().PageLoad = TimeSpan.FromSeconds(30);
-        driver.Manage().Window.Size = new Size(1440, 900);
+        // Единый desktop-размер для headed и headless запусков. На меньшем окне
+        // корзина переключается в адаптивную разметку и часть контролов счёта
+        // уезжает в мобильные дубли.
+        driver.Manage().Window.Size = new Size(1920, 1080);
         return driver;
     }
 

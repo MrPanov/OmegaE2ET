@@ -30,6 +30,10 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     private static readonly By AddQuantityMinusBy = By.CssSelector("button.claim-minus-btn");
     private static readonly By RowQuantityInputBy = By.CssSelector("input[type='number']");
     private static readonly By RowCheckboxBy = By.CssSelector("input[type='checkbox']");
+    private static readonly By WarehouseNameBy = By.CssSelector(
+        "tr.hidden-lg td[ng-repeat='war in availablewarehouses'] span[data-content]");
+    private static readonly By WarehouseStockBy = By.CssSelector(
+        "td[ng-repeat='war in item.availablewarehouses'] span");
     private static readonly By SelectAllLabelBy = By.XPath(
         "//label[contains(normalize-space(.), 'Вибрати всі')]");
     // Сама сумма лежит не в узле с подписью, а в ближайшем следующем <strong>.
@@ -43,6 +47,11 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     private static readonly By HeaderCartBy = By.Id("navbarBasket");
     private static readonly By InvoiceJournalBy = By.XPath(
         "//a[contains(normalize-space(.), 'Журнал рахунків')]");
+    private static readonly By ReserveInvoiceBy = By.Id("buttonBasketReservationInvoice");
+    private static readonly By VisibleModalBy = By.CssSelector(".modal-content");
+    private static readonly By ModalTitleBy = By.CssSelector(".create-ticket-title");
+    private static readonly By ModalOptionLabelBy = By.CssSelector(".radio label");
+    private static readonly By ModalConfirmBy = By.CssSelector("button[ng-click='ok()']");
     private static readonly By BlockingOverlayBy = By.CssSelector("div.block-ui-overlay");
 
     private static readonly TimeSpan ContentSettleTime = TimeSpan.FromMilliseconds(1500);
@@ -143,6 +152,68 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     public bool IsProductSelected(string cardNumber) =>
         RequiredProductRow(cardNumber).FindElement(RowCheckboxBy).Selected;
 
+    /// <summary>
+    /// Устанавливает состояние флажка конкретной позиции. Для создания счёта
+    /// нельзя пользоваться только «Вибрати всі»: этот флажок не управляет
+    /// товарами под заказ и может оставить в выборе чужую строку.
+    /// </summary>
+    public void SetProductSelected(string cardNumber, bool selected)
+    {
+        var checkbox = RequiredProductRow(cardNumber).FindElement(RowCheckboxBy);
+        if (checkbox.Selected == selected) return;
+
+        driver.ClickRobustly(checkbox);
+        _wait.Until(_ => IsProductSelected(cardNumber) == selected);
+        WaitUntilIdle();
+    }
+
+    /// <summary>Снимает выбор со всех видимых складских и заказных позиций.</summary>
+    public void DeselectAllProducts()
+    {
+        foreach (var cardNumber in ProductCards.Distinct(StringComparer.Ordinal).ToArray())
+        {
+            SetProductSelected(cardNumber, false);
+        }
+    }
+
+    /// <summary>Карточки всех позиций, которые сейчас войдут в будущий счёт.</summary>
+    public IReadOnlyList<string> SelectedProductCards => driver.FindElements(BasketRowsBy)
+        .Where(IsVisibleRow)
+        .Where(row => row.FindElements(RowCheckboxBy).FirstOrDefault()?.Selected == true)
+        .SelectMany(row => row.FindElements(ProductCardLinkBy))
+        .Select(link => UiText.NormalizeWhitespace(link.Text))
+        .Where(text => text.Length > 0)
+        .ToArray();
+
+    /// <summary>
+    /// Склады с положительным остатком в том же порядке, в котором они показаны
+    /// в строке товара. Названия берутся из заголовков таблицы, а не из окна
+    /// выбора: так тест выбирает склад, где товар действительно был доступен.
+    /// </summary>
+    public IReadOnlyList<string> WarehousesWithStock(string cardNumber)
+    {
+        var row = RequiredProductRow(cardNumber);
+        var names = row.FindElements(WarehouseNameBy)
+            .Select(element => UiText.NormalizeWhitespace(
+                element.GetAttribute("data-content") ?? string.Empty))
+            .ToArray();
+        var stocks = row.FindElements(WarehouseStockBy)
+            .Select(element => UiText.NormalizeWhitespace(element.Text))
+            .ToArray();
+
+        if (names.Length == 0 || names.Length != stocks.Length)
+        {
+            throw new InvalidOperationException(
+                $"Не удалось сопоставить склады и остатки для карточки '{cardNumber}': " +
+                $"складов {names.Length}, значений {stocks.Length}.");
+        }
+
+        return names.Zip(stocks)
+            .Where(item => HasStock(item.Second))
+            .Select(item => item.First)
+            .ToArray();
+    }
+
     /// <summary>Состояния флажков всех видимых позиций.</summary>
     public IReadOnlyList<bool> SelectionStates => driver.FindElements(BasketRowsBy)
         .Where(IsVisibleRow)
@@ -166,11 +237,17 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     /// Вводит количество вручную. Недопустимое значение приложение возвращает
     /// к минимально допустимому, поэтому ожидание строится не на введённом тексте.
     /// </summary>
-    public void SetQuantity(string cardNumber, string value)
+    public void SetQuantity(string cardNumber, string value, int? expected = null)
     {
         var input = RequiredProductRow(cardNumber).FindElement(RowQuantityInputBy);
         input.SendKeys(Keys.Control + "a");
         input.SendKeys(value + Keys.Tab);
+
+        if (expected is not null)
+        {
+            _wait.Until(_ => ProductQuantity(cardNumber) == expected);
+        }
+
         WaitUntilIdle();
     }
 
@@ -216,6 +293,31 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
         AcceptConfirmationIfPresent();
 
         _wait.Until(_ => !HasProduct(cardNumber));
+        WaitUntilIdle();
+    }
+
+    /// <summary>
+    /// Нажимает «У резерв» и, если приложение запросило склад или сервис,
+    /// выбирает первый доступный вариант. После подтверждения ждёт завершения
+    /// всей цепочки Angular-запросов, включая создание счёта.
+    /// </summary>
+    public void ReserveSelectedProducts(string preferredWarehouse)
+    {
+        if (SelectedProductCards.Count == 0)
+        {
+            throw new InvalidOperationException("Для резервирования не выбрана ни одна позиция.");
+        }
+
+        var checkpoint = driver.CaptureAngularRequestCheckpoint();
+        ClickWhenReady(ReserveInvoiceBy);
+
+        var dialog = WaitForReservationDialogIfPresent();
+        if (dialog is not null)
+        {
+            SelectReservationOption(dialog, preferredWarehouse);
+        }
+
+        driver.WaitUntilAngularRequestsCompleteAfter(checkpoint, waitTimeout);
         WaitUntilIdle();
     }
 
@@ -330,6 +432,74 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
         catch (NoAlertPresentException)
         {
         }
+    }
+
+    private IWebElement? WaitForReservationDialogIfPresent()
+    {
+        var dialogWait = new WebDriverWait(
+            driver,
+            TimeSpan.FromSeconds(Math.Min(5, Math.Max(1, waitTimeout.TotalSeconds))));
+
+        try
+        {
+            return dialogWait.Until(_ => driver.FindElements(VisibleModalBy)
+                .FirstOrDefault(element => element.Displayed));
+        }
+        catch (WebDriverTimeoutException)
+        {
+            // Для товара с уже определённым виртуальным складом счёт создаётся
+            // сразу, без промежуточного диалога.
+            return null;
+        }
+    }
+
+    private void SelectReservationOption(IWebElement dialog, string preferredWarehouse)
+    {
+        var title = UiText.NormalizeWhitespace(
+            dialog.FindElements(ModalTitleBy).FirstOrDefault()?.Text ?? string.Empty);
+        if (!title.Contains("склад", StringComparison.OrdinalIgnoreCase) &&
+            !title.Contains("сервіс", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"После резервирования открыт неизвестный диалог '{title}'.");
+        }
+
+        var labels = dialog.FindElements(ModalOptionLabelBy)
+            .Where(element => element.Displayed && element.Enabled)
+            .ToArray();
+        var optionLabel = title.Contains("склад", StringComparison.OrdinalIgnoreCase)
+            ? labels.FirstOrDefault(label => string.Equals(
+                UiText.NormalizeWhitespace(label.Text),
+                preferredWarehouse,
+                StringComparison.OrdinalIgnoreCase))
+            : labels.FirstOrDefault();
+        if (optionLabel is null)
+        {
+            throw new InvalidOperationException(
+                $"В диалоге '{title}' нет доступного варианта '{preferredWarehouse}'.");
+        }
+
+        var option = optionLabel.FindElement(By.CssSelector("input[type='radio']"));
+        driver.ClickRobustly(optionLabel);
+        _wait.Until(_ => option.Selected);
+
+        var confirm = dialog.FindElements(ModalConfirmBy)
+            .FirstOrDefault(element => element.Displayed && element.Enabled)
+            ?? throw new InvalidOperationException(
+                $"В диалоге '{title}' не найдена кнопка подтверждения.");
+
+        driver.ClickRobustly(confirm);
+        _wait.Until(_ => !driver.IsVisible(VisibleModalBy));
+    }
+
+    private static bool HasStock(string stock)
+    {
+        var normalized = stock.Replace(">", string.Empty, StringComparison.Ordinal).Trim();
+        return decimal.TryParse(
+                   normalized.Replace(',', '.'),
+                   NumberStyles.Number,
+                   CultureInfo.InvariantCulture,
+                   out var value) && value > 0;
     }
 
     private IWebElement? VisibleElement(By by) => driver.FindElements(by)
