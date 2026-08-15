@@ -18,13 +18,19 @@ namespace UiAutomation.Tests.Tests.Basket;
 [Category(TestCategories.MutatesUserState)]
 public sealed class BasketInvoiceTests : BasketTestBase
 {
-    private const string CatalogCode = "OC90";
-    private const string Card = "4610495";
+    private const string CourierCatalogCode = "OC90";
+    private const string CourierCard = "4610495";
+    private const string RoutedCard = "5614799817";
+    private const string KyivWarehouse = "Київ";
+    private const string PlannedDelivery = "Планова доставка";
+    private const string Pickup = "Самовивіз";
+    private const string CashPayment = "За готівку";
 
     private BasketInvoicePage _invoice = null!;
     private Dictionary<string, bool> _selectionBefore = [];
     private IReadOnlyCollection<string>? _invoiceNumbersBefore;
     private string? _createdInvoiceNumber;
+    private string? _testCard;
     private int? _originalProductQuantity;
     private bool _reservationStarted;
     private bool _testProductMayExist;
@@ -34,6 +40,7 @@ public sealed class BasketInvoiceTests : BasketTestBase
         _selectionBefore = [];
         _invoiceNumbersBefore = null;
         _createdInvoiceNumber = null;
+        _testCard = null;
         _originalProductQuantity = null;
         _reservationStarted = false;
         _testProductMayExist = false;
@@ -43,82 +50,179 @@ public sealed class BasketInvoiceTests : BasketTestBase
     }
 
     /// <summary>
-    /// Добавляет одну позицию, оставляет выбранной только её, создаёт счёт
-    /// кнопкой «У резерв» и проверяет номер, статус и состав документа.
+    /// Региональный склад без маршрута автоматически переключает счёт на
+    /// курьерскую доставку. Из-за незаполненных реквизитов доставки Test-клиента
+    /// сайт оставляет такой документ в штатном fallback-статусе «Збережений».
     /// </summary>
     [Test]
     [Property("TestCaseId", "BASKET-015")]
-    public void SelectedProductCanBeReservedInNewInvoice()
+    public void InvoiceWithoutShipmentRouteIsCreatedWithCourierDelivery()
     {
-        _selectionBefore = Basket.ProductCards
-            .Distinct(StringComparer.Ordinal)
-            .ToDictionary(card => card, Basket.IsProductSelected, StringComparer.Ordinal);
-        _originalProductQuantity = Basket.HasProduct(Card)
-            ? Basket.ProductQuantity(Card)
-            : 0;
-
-        Basket.DeselectAllProducts();
-
-        // OC90 уже может находиться в общей корзине. Добавление должно увеличить
-        // существующую строку ровно на единицу, а не создавать дубль.
-        _testProductMayExist = true;
-        Basket.AddByCode(
-            CatalogCode,
-            Card,
-            expectedQuantity: _originalProductQuantity.Value + 1);
-
-        // В резерв отправляется ровно одна единица. Исходное количество общей
-        // корзины будет восстановлено в TearDown после удаления счёта.
-        Basket.SetQuantity(Card, "1", expected: 1);
-
-        // После добавления Angular повторно применяет начальный выбор и может
-        // отметить другие складские строки. Поэтому изоляция выбора выполняется
-        // ещё раз непосредственно перед созданием счёта.
-        Basket.DeselectAllProducts();
-        Basket.SetProductSelected(Card, true);
-
-        Assert.That(
-            Basket.SelectedProductCards,
-            Is.EqualTo(new[] { Card }),
-            "В счёт могла попасть посторонняя позиция корзины.");
-
-        var warehousesWithStock = Basket.WarehousesWithStock(Card);
+        PrepareSingleProduct(CourierCatalogCode, CourierCard);
+        var warehousesWithStock = Basket.WarehousesWithStock(CourierCard);
         Assert.That(
             warehousesWithStock,
             Is.Not.Empty,
-            $"Для '{CatalogCode}' не найден ни один склад с положительным остатком.");
+            $"Для '{CourierCatalogCode}' не найден ни один склад с положительным остатком.");
         var selectedWarehouse = warehousesWithStock[0];
-        TestContext.Out.WriteLine(
-            $"Склады с остатком для '{CatalogCode}': {string.Join(", ", warehousesWithStock)}. " +
-            $"Выбран первый: {selectedWarehouse}.");
-
-        _invoiceNumbersBefore = _invoice.OpenInvoiceNumbers.ToArray();
-
-        _reservationStarted = true;
-        Basket.ReserveSelectedProducts(selectedWarehouse);
-        _createdInvoiceNumber = _invoice.WaitForNewInvoiceNumber(_invoiceNumbersBefore);
-        TestContext.Out.WriteLine(
-            $"Создан счёт '{_createdInvoiceNumber}': " +
-            _invoice.Description(_createdInvoiceNumber));
+        CreateInvoice(CourierCard, selectedWarehouse);
 
         Assert.Multiple(() =>
         {
             Assert.That(
-                _createdInvoiceNumber,
-                Is.Not.Empty,
-                "После резервирования не появился номер нового счёта.");
+                _invoice.IsSaved(_createdInvoiceNumber!),
+                Is.True,
+                $"Счёт '{_createdInvoiceNumber}' не получил fallback-статус 'Збережений'.");
             Assert.That(
-                _invoice.IsReserved(_createdInvoiceNumber),
+                _invoice.HasDeliveryType(_createdInvoiceNumber!, "Кур'єрська Доставка"),
+                Is.True,
+                $"Счёт '{_createdInvoiceNumber}' не переключился на курьерскую доставку.");
+            Assert.That(
+                _invoice.HasProduct(_createdInvoiceNumber!, CourierCard),
+                Is.True,
+                $"В счёте '{_createdInvoiceNumber}' нет карточки '{CourierCard}'.");
+            Assert.That(
+                _invoice.HasWarehouse(_createdInvoiceNumber!, selectedWarehouse),
+                Is.True,
+                $"Счёт '{_createdInvoiceNumber}' создан не на складе '{selectedWarehouse}'.");
+        });
+    }
+
+    /// <summary>Создаёт резерв с плановой доставкой с киевского склада.</summary>
+    [Test]
+    [Property("TestCaseId", "BASKET-016")]
+    public void InvoiceCanBeReservedWithPlannedDeliveryFromKyivWarehouse()
+    {
+        PrepareSingleProduct(RoutedCard, RoutedCard);
+        var selectedWarehouse = RequiredWarehouseWithStock(RoutedCard, KyivWarehouse);
+        CreateInvoice(RoutedCard, selectedWarehouse, PlannedDelivery);
+
+        AssertReservedInvoice(RoutedCard, selectedWarehouse, PlannedDelivery);
+    }
+
+    /// <summary>Создаёт резерв с самовывозом с киевского склада.</summary>
+    [Test]
+    [Property("TestCaseId", "BASKET-017")]
+    public void InvoiceCanBeReservedWithPickupFromKyivWarehouse()
+    {
+        PrepareSingleProduct(RoutedCard, RoutedCard);
+        var selectedWarehouse = RequiredWarehouseWithStock(RoutedCard, KyivWarehouse);
+        CreateSavedInvoice(RoutedCard, selectedWarehouse);
+        _invoice.ConfigureAndReserve(_createdInvoiceNumber!, Pickup, CashPayment);
+
+        AssertReservedInvoice(RoutedCard, selectedWarehouse, Pickup);
+        Assert.That(
+            _invoice.HasPaymentType(_createdInvoiceNumber!, CashPayment),
+            Is.True,
+            $"В счёте '{_createdInvoiceNumber}' не выбран способ оплаты '{CashPayment}'.");
+    }
+
+    private void PrepareSingleProduct(string identifier, string card)
+    {
+        _selectionBefore = Basket.ProductCards
+            .Distinct(StringComparer.Ordinal)
+            .ToDictionary(item => item, Basket.IsProductSelected, StringComparer.Ordinal);
+        _testCard = card;
+        _originalProductQuantity = Basket.HasProduct(card)
+            ? Basket.ProductQuantity(card)
+            : 0;
+
+        Basket.DeselectAllProducts();
+
+        _testProductMayExist = true;
+        Basket.AddByIdentifier(
+            identifier,
+            card,
+            expectedQuantity: _originalProductQuantity.Value + 1);
+
+        Basket.SetQuantity(card, "1", expected: 1);
+        Basket.DeselectAllProducts();
+        Basket.SetProductSelected(card, true);
+
+        Assert.That(
+            Basket.SelectedProductCards,
+            Is.EqualTo(new[] { card }),
+            "В счёт могла попасть посторонняя позиция корзины.");
+    }
+
+    private string RequiredWarehouseWithStock(string card, string expectedWarehouse)
+    {
+        var warehouses = Basket.WarehousesWithStock(card);
+        var warehouse = warehouses.FirstOrDefault(item =>
+            item.Contains(expectedWarehouse, StringComparison.OrdinalIgnoreCase));
+
+        Assert.That(
+            warehouse,
+            Is.Not.Null,
+            $"У карточки '{card}' нет положительного остатка на складе '{expectedWarehouse}'. " +
+            $"Доступны: [{string.Join(", ", warehouses)}].");
+        return warehouse!;
+    }
+
+    private void CreateInvoice(string card, string warehouse, string? service = null)
+    {
+        TestContext.Out.WriteLine(
+            $"Для карточки '{card}' выбран склад '{warehouse}'" +
+            (service is null ? "." : $" и сервис '{service}'."));
+
+        _invoiceNumbersBefore = _invoice.OpenInvoiceNumbers.ToArray();
+        _reservationStarted = true;
+        Basket.ReserveSelectedProducts(warehouse, service);
+        _createdInvoiceNumber = _invoice.WaitForNewInvoiceNumber(_invoiceNumbersBefore);
+
+        Assert.That(
+            _createdInvoiceNumber,
+            Is.Not.Empty,
+            "После создания не появился номер нового счёта.");
+        TestContext.Out.WriteLine(
+            $"Создан счёт '{_createdInvoiceNumber}': " +
+            _invoice.Description(_createdInvoiceNumber));
+    }
+
+    private void CreateSavedInvoice(string card, string warehouse)
+    {
+        TestContext.Out.WriteLine(
+            $"Для карточки '{card}' создаётся сохранённый счёт на складе '{warehouse}'.");
+
+        _invoiceNumbersBefore = _invoice.OpenInvoiceNumbers.ToArray();
+        _reservationStarted = true;
+        Basket.SaveSelectedProducts(warehouse);
+        _createdInvoiceNumber = _invoice.WaitForNewInvoiceNumber(_invoiceNumbersBefore);
+
+        Assert.That(
+            _invoice.IsSaved(_createdInvoiceNumber),
+            Is.True,
+            $"Счёт '{_createdInvoiceNumber}' не получил статус 'Збережений'.");
+        TestContext.Out.WriteLine(
+            $"Создан сохранённый счёт '{_createdInvoiceNumber}': " +
+            _invoice.Description(_createdInvoiceNumber));
+    }
+
+    private void AssertReservedInvoice(string card, string warehouse, string deliveryType)
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                _invoice.IsReserved(_createdInvoiceNumber!),
                 Is.True,
                 $"Счёт '{_createdInvoiceNumber}' не получил статус 'Зарезервований'.");
             Assert.That(
-                _invoice.HasProduct(_createdInvoiceNumber, Card),
+                _invoice.HasDeliveryType(_createdInvoiceNumber!, deliveryType),
                 Is.True,
-                $"В счёте '{_createdInvoiceNumber}' нет карточки '{Card}'.");
+                $"В счёте '{_createdInvoiceNumber}' не выбран вид доставки '{deliveryType}'.");
             Assert.That(
-                _invoice.HasWarehouse(_createdInvoiceNumber, selectedWarehouse),
+                _invoice.HasProduct(_createdInvoiceNumber!, card),
                 Is.True,
-                $"Счёт '{_createdInvoiceNumber}' создан не на складе '{selectedWarehouse}'.");
+                $"В счёте '{_createdInvoiceNumber}' нет карточки '{card}'.");
+            Assert.That(
+                _invoice.ReservedQuantity(_createdInvoiceNumber!, card),
+                Is.EqualTo(1),
+                $"В счёте '{_createdInvoiceNumber}' должна быть зарезервирована " +
+                $"ровно одна единица карточки '{card}'.");
+            Assert.That(
+                _invoice.HasWarehouse(_createdInvoiceNumber!, warehouse),
+                Is.True,
+                $"Счёт '{_createdInvoiceNumber}' создан не на складе '{warehouse}'.");
         });
     }
 
@@ -162,15 +266,15 @@ public sealed class BasketInvoiceTests : BasketTestBase
 
             if (_testProductMayExist)
             {
-                Basket.RemoveProduct(Card);
+                Basket.RemoveProduct(_testCard!);
 
                 if (_originalProductQuantity > 0)
                 {
-                    Basket.AddProduct(Card, _originalProductQuantity.Value);
+                    Basket.AddProduct(_testCard!, _originalProductQuantity.Value);
                     Assert.That(
-                        Basket.ProductQuantity(Card),
+                        Basket.ProductQuantity(_testCard!),
                         Is.EqualTo(_originalProductQuantity.Value),
-                        $"Не удалось восстановить исходное количество карточки '{Card}'.");
+                        $"Не удалось восстановить исходное количество карточки '{_testCard}'.");
                 }
             }
 
@@ -189,6 +293,7 @@ public sealed class BasketInvoiceTests : BasketTestBase
         finally
         {
             _createdInvoiceNumber = null;
+            _testCard = null;
             _invoiceNumbersBefore = null;
             _originalProductQuantity = null;
             _selectionBefore = [];

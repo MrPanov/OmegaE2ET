@@ -47,11 +47,18 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     private static readonly By HeaderCartBy = By.Id("navbarBasket");
     private static readonly By InvoiceJournalBy = By.XPath(
         "//a[contains(normalize-space(.), 'Журнал рахунків')]");
-    private static readonly By ReserveInvoiceBy = By.Id("buttonBasketReservationInvoice");
+    private static readonly By SaveInvoiceBy = By.CssSelector(
+        "#buttonBasketCreateInvoice[ng-click=\"basketLength() == 0 || createInvoice('Save')\"]");
+    private static readonly By ReserveInvoiceBy = By.CssSelector(
+        "#buttonBasketReservationInvoice[ng-click=\"basketLength() == 0 || createInvoice('Apply')\"]");
     private static readonly By VisibleModalBy = By.CssSelector(".modal-content");
     private static readonly By ModalTitleBy = By.CssSelector(".create-ticket-title");
     private static readonly By ModalOptionLabelBy = By.CssSelector(".radio label");
     private static readonly By ModalConfirmBy = By.CssSelector("button[ng-click='ok()']");
+    private static readonly By MatrixReserveBy = By.CssSelector(
+        "#buttonMatrixReadyInvoice[ng-click=\"reserve('matrixApply')\"]");
+    private static readonly By NotificationBy = By.CssSelector(
+        "#toast-container .toast, #toast-container .toast-title, #toast-container .toast-message");
     private static readonly By BlockingOverlayBy = By.CssSelector("div.block-ui-overlay");
 
     private static readonly TimeSpan ContentSettleTime = TimeSpan.FromMilliseconds(1500);
@@ -122,9 +129,46 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     /// а завершение операции — по ожидаемому количеству в ней.
     /// </summary>
     public void AddByCode(string catalogCode, string expectedCard, int expectedQuantity, int quantity = 1)
+        => AddByIdentifier(catalogCode, expectedCard, expectedQuantity, quantity);
+
+    /// <summary>
+    /// Добавляет товар по номеру карточки или каталожному коду и проверяет,
+    /// что изменилась именно ожидаемая строка корзины.
+    /// </summary>
+    public void AddByIdentifier(
+        string identifier,
+        string expectedCard,
+        int expectedQuantity,
+        int quantity = 1)
     {
-        SubmitAddForm(catalogCode, quantity);
-        _wait.Until(_ => HasProduct(expectedCard) && ProductQuantity(expectedCard) == expectedQuantity);
+        SubmitAddForm(identifier, quantity);
+        var notificationsAfterResponse = driver.VisibleTexts(NotificationBy);
+
+        try
+        {
+            var resultWait = new WebDriverWait(
+                driver,
+                TimeSpan.FromSeconds(Math.Min(5, Math.Max(1, waitTimeout.TotalSeconds))));
+            resultWait.Until(_ =>
+                HasProduct(expectedCard) && ProductQuantity(expectedCard) == expectedQuantity);
+        }
+        catch (WebDriverTimeoutException exception)
+        {
+            var notifications = notificationsAfterResponse
+                .Concat(driver.VisibleTexts(NotificationBy))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            var notificationText = notifications.Length == 0
+                ? "уведомлений нет"
+                : string.Join(" | ", notifications);
+
+            throw new InvalidOperationException(
+                $"После клика '#buttonBasketGo' и завершения запроса идентификатор '{identifier}' " +
+                $"не дал карточку '{expectedCard}' с количеством {expectedQuantity}. " +
+                $"Видимые карточки: [{string.Join(", ", ProductCards)}]; {notificationText}.",
+                exception);
+        }
+
         WaitUntilIdle();
     }
 
@@ -301,12 +345,11 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     /// выбирает первый доступный вариант. После подтверждения ждёт завершения
     /// всей цепочки Angular-запросов, включая создание счёта.
     /// </summary>
-    public void ReserveSelectedProducts(string preferredWarehouse)
+    public void ReserveSelectedProducts(
+        string preferredWarehouse,
+        string? preferredService = null)
     {
-        if (SelectedProductCards.Count == 0)
-        {
-            throw new InvalidOperationException("Для резервирования не выбрана ни одна позиция.");
-        }
+        var selectedCard = RequiredSingleSelectedCard();
 
         var checkpoint = driver.CaptureAngularRequestCheckpoint();
         ClickWhenReady(ReserveInvoiceBy);
@@ -314,7 +357,29 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
         var dialog = WaitForReservationDialogIfPresent();
         if (dialog is not null)
         {
-            SelectReservationOption(dialog, preferredWarehouse);
+            SelectReservationOption(dialog, preferredWarehouse, preferredService);
+        }
+
+        driver.WaitUntilAngularRequestsCompleteAfter(checkpoint, waitTimeout);
+        ConfirmProductDeliveryMatrixIfPresent(selectedCard);
+        WaitUntilIdle();
+    }
+
+    /// <summary>
+    /// Создаёт счёт в статусе «Збережений». Такой промежуточный шаг нужен,
+    /// когда перед резервированием следует изменить вид доставки или оплату.
+    /// </summary>
+    public void SaveSelectedProducts(string preferredWarehouse)
+    {
+        _ = RequiredSingleSelectedCard();
+
+        var checkpoint = driver.CaptureAngularRequestCheckpoint();
+        ClickWhenReady(SaveInvoiceBy);
+
+        var dialog = WaitForReservationDialogIfPresent();
+        if (dialog is not null)
+        {
+            SelectReservationOption(dialog, preferredWarehouse, preferredService: null);
         }
 
         driver.WaitUntilAngularRequestsCompleteAfter(checkpoint, waitTimeout);
@@ -327,8 +392,19 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
         var input = _wait.Until(_ => VisibleElement(AddCardInputBy));
         input.Clear();
         input.SendKeys(identifier);
+        _wait.Until(_ => string.Equals(
+            VisibleElement(AddCardInputBy)?.GetAttribute("value"),
+            identifier,
+            StringComparison.Ordinal));
+
         SetAddQuantity(quantity);
+
+        // Нажимаем именно кнопку подтверждения формы и ждём её Angular-запрос.
+        // Одного ожидания строки товара недостаточно: при непринятом клике оно
+        // скрывает настоящую причину за общим таймаутом AddByCode.
+        var checkpoint = driver.CaptureAngularRequestCheckpoint();
         ClickWhenReady(AddCardConfirmBy);
+        driver.WaitUntilAngularRequestsCompleteAfter(checkpoint, waitTimeout);
     }
 
     /// <summary>
@@ -385,6 +461,20 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
 
     private IWebElement RequiredProductRow(string cardNumber) => ProductRow(cardNumber)
         ?? throw new InvalidOperationException($"Позиция '{cardNumber}' отсутствует в корзине.");
+
+    private string RequiredSingleSelectedCard()
+    {
+        var selectedCards = SelectedProductCards;
+        return selectedCards.Count switch
+        {
+            1 => selectedCards[0],
+            0 => throw new InvalidOperationException(
+                "Для создания счёта не выбрана ни одна позиция."),
+            _ => throw new InvalidOperationException(
+                $"Для создания счёта выбрано несколько позиций: " +
+                $"{string.Join(", ", selectedCards)}.")
+        };
+    }
 
     private IWebElement? ProductRow(string cardNumber) => driver.FindElements(BasketRowsBy)
         .FirstOrDefault(row => IsVisibleRow(row) && RowBelongsToCard(row, cardNumber));
@@ -453,7 +543,10 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
         }
     }
 
-    private void SelectReservationOption(IWebElement dialog, string preferredWarehouse)
+    private void SelectReservationOption(
+        IWebElement dialog,
+        string preferredWarehouse,
+        string? preferredService)
     {
         var title = UiText.NormalizeWhitespace(
             dialog.FindElements(ModalTitleBy).FirstOrDefault()?.Text ?? string.Empty);
@@ -467,16 +560,20 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
         var labels = dialog.FindElements(ModalOptionLabelBy)
             .Where(element => element.Displayed && element.Enabled)
             .ToArray();
-        var optionLabel = title.Contains("склад", StringComparison.OrdinalIgnoreCase)
-            ? labels.FirstOrDefault(label => string.Equals(
-                UiText.NormalizeWhitespace(label.Text),
-                preferredWarehouse,
-                StringComparison.OrdinalIgnoreCase))
-            : labels.FirstOrDefault();
+        var isWarehouseDialog = title.Contains("склад", StringComparison.OrdinalIgnoreCase);
+        var requestedOption = isWarehouseDialog ? preferredWarehouse : preferredService;
+        var optionLabel = requestedOption is null
+            ? labels.FirstOrDefault()
+            : labels.FirstOrDefault(label => OptionMatches(label.Text, requestedOption));
         if (optionLabel is null)
         {
+            var availableOptions = labels
+                .Select(label => UiText.NormalizeWhitespace(label.Text))
+                .Where(text => text.Length > 0)
+                .ToArray();
             throw new InvalidOperationException(
-                $"В диалоге '{title}' нет доступного варианта '{preferredWarehouse}'.");
+                $"В диалоге '{title}' нет доступного варианта '{requestedOption}'. " +
+                $"Доступны: [{string.Join(", ", availableOptions)}].");
         }
 
         var option = optionLabel.FindElement(By.CssSelector("input[type='radio']"));
@@ -490,6 +587,52 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
 
         driver.ClickRobustly(confirm);
         _wait.Until(_ => !driver.IsVisible(VisibleModalBy));
+    }
+
+    private static bool OptionMatches(string actual, string expected)
+    {
+        var normalizedActual = UiText.NormalizeWhitespace(actual);
+        var normalizedExpected = UiText.NormalizeWhitespace(expected);
+        return normalizedActual.Contains(normalizedExpected, StringComparison.OrdinalIgnoreCase) ||
+               normalizedExpected.Contains(normalizedActual, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// После выбора склада Test-среда открывает матрицу распределения. Кнопка
+    /// имеет дублирующийся id, поэтому дополнительно фиксируем обработчик
+    /// <c>reserve('matrixApply')</c>, чтобы не нажать «Відвантажити».
+    /// Production может сразу создать резерв без этого окна.
+    /// </summary>
+    private void ConfirmProductDeliveryMatrixIfPresent(string expectedCard)
+    {
+        var matrixWait = new WebDriverWait(
+            driver,
+            TimeSpan.FromSeconds(Math.Min(10, Math.Max(1, waitTimeout.TotalSeconds))));
+        IWebElement? reserve;
+        try
+        {
+            reserve = matrixWait.Until(_ => driver.FindElements(MatrixReserveBy)
+                .FirstOrDefault(element => element.Displayed && element.Enabled));
+        }
+        catch (WebDriverTimeoutException)
+        {
+            // В Production матрица для выбранного виртуального склада не нужна.
+            return;
+        }
+
+        var matrix = reserve!.FindElements(By.XPath("./ancestor::*[contains(@class,'modal')][1]"))
+            .FirstOrDefault();
+        if (matrix is not null &&
+            !UiText.NormalizeWhitespace(matrix.Text).Contains(expectedCard, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Матрица резервирования не содержит карточку '{expectedCard}'.");
+        }
+
+        var checkpoint = driver.CaptureAngularRequestCheckpoint();
+        driver.ClickRobustly(reserve);
+        driver.WaitUntilAngularRequestsCompleteAfter(checkpoint, waitTimeout);
+        _wait.Until(_ => !driver.IsVisible(MatrixReserveBy));
     }
 
     private static bool HasStock(string stock)

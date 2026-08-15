@@ -24,6 +24,14 @@ public sealed class BasketInvoicePage(IWebDriver driver, TimeSpan waitTimeout)
     private static readonly By JournalInvoiceLinkBy = By.CssSelector("a[ng-click='activate(item)']");
     private static readonly By JournalInvoiceDeleteBy = By.CssSelector(
         "#buttonBasketRemoveInvoice[ng-click='deleteInvoice($event, item)']");
+    private static readonly By ShipmentTypeBy = By.Id("slctshipmentType");
+    private static readonly By PaymentTypeBy = By.CssSelector(
+        "omega-selectize[options-selectize='lists.paymentList']");
+    private static readonly By SelectizeDescriptionBy = By.CssSelector(".description-label");
+    private static readonly By SelectizeOptionBy = By.CssSelector(
+        ".selectize-dropdown-content .option[data-selectable]");
+    private static readonly By ActiveInvoiceReserveBy = By.CssSelector(
+        "#buttonBasketReservationInvoice[ng-click=\"save($event,'Apply')\"]");
 
     private readonly WebDriverWait _wait = new(driver, waitTimeout);
 
@@ -76,12 +84,15 @@ public sealed class BasketInvoicePage(IWebDriver driver, TimeSpan waitTimeout)
         };
     }
 
-    public bool IsReserved(string invoiceNumber)
-    {
-        OpenInvoice(invoiceNumber);
-        return ActiveInvoiceText(invoiceNumber)
-            .Contains("Зарезервований", StringComparison.OrdinalIgnoreCase);
-    }
+    public bool IsReserved(string invoiceNumber) => HasAnyText(
+        invoiceNumber,
+        "Зарезервований",
+        "Зарезервирован");
+
+    public bool IsSaved(string invoiceNumber) => HasAnyText(
+        invoiceNumber,
+        "Збережений",
+        "Сохранён");
 
     public bool HasProduct(string invoiceNumber, string cardNumber)
     {
@@ -93,9 +104,99 @@ public sealed class BasketInvoicePage(IWebDriver driver, TimeSpan waitTimeout)
                 StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Возвращает значение колонки «Резерв» для конкретной карточки. Индекс
+    /// колонки определяется по заголовку таблицы, поэтому добавление новых
+    /// колонок в счёт не сдвинет проверку на чужое значение.
+    /// </summary>
+    public int ReservedQuantity(string invoiceNumber, string cardNumber)
+    {
+        var pane = OpenInvoice(invoiceNumber);
+        var cardLink = pane.FindElements(InvoiceProductCardBy)
+            .FirstOrDefault(link => string.Equals(
+                UiText.NormalizeWhitespace(link.Text),
+                cardNumber,
+                StringComparison.Ordinal))
+            ?? throw new InvalidOperationException(
+                $"В счёте '{invoiceNumber}' нет карточки '{cardNumber}'.");
+
+        var row = cardLink.FindElement(By.XPath("./ancestor::tr[1]"));
+        var table = row.FindElement(By.XPath("./ancestor::table[1]"));
+        var headers = table.FindElements(By.CssSelector("thead th"))
+            .Select(header => UiText.NormalizeWhitespace(header.Text))
+            .ToArray();
+        var reserveColumn = Array.FindIndex(headers, header =>
+            string.Equals(header, "Резерв", StringComparison.OrdinalIgnoreCase));
+        if (reserveColumn < 0)
+        {
+            throw new InvalidOperationException(
+                $"В счёте '{invoiceNumber}' не найдена колонка 'Резерв'. " +
+                $"Колонки: [{string.Join(", ", headers)}].");
+        }
+
+        var cells = row.FindElements(By.CssSelector("td"));
+        if (reserveColumn >= cells.Count)
+        {
+            throw new InvalidOperationException(
+                $"В строке карточки '{cardNumber}' нет ячейки колонки 'Резерв'.");
+        }
+
+        var value = UiText.NormalizeWhitespace(cells[reserveColumn].Text);
+        if (!int.TryParse(value, out var quantity))
+        {
+            throw new InvalidOperationException(
+                $"Значение резерва карточки '{cardNumber}' не является числом: '{value}'.");
+        }
+
+        return quantity;
+    }
+
     public bool HasWarehouse(string invoiceNumber, string warehouseName) =>
         NormalizeWarehouse(ActiveInvoiceText(invoiceNumber))
             .Contains(NormalizeWarehouse(warehouseName), StringComparison.Ordinal);
+
+    public bool HasDeliveryType(string invoiceNumber, string deliveryType)
+    {
+        var invoiceText = ActiveInvoiceText(invoiceNumber);
+        return Regex.IsMatch(
+            invoiceText,
+            $@"Вид\s+доставки\s+{Regex.Escape(deliveryType)}(?:\s|$)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
+    public bool HasPaymentType(string invoiceNumber, string paymentType)
+    {
+        var invoiceText = ActiveInvoiceText(invoiceNumber);
+        return Regex.IsMatch(
+            invoiceText,
+            $@"Оплата\s+{Regex.Escape(paymentType)}(?:\s|$)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
+    /// <summary>
+    /// Настраивает сохранённый счёт и переводит его в резерв. После прямого
+    /// резервирования поля доставки заблокированы, поэтому менять их нужно до
+    /// нажатия кнопки резерва внутри счёта.
+    /// </summary>
+    public void ConfigureAndReserve(
+        string invoiceNumber,
+        string deliveryType,
+        string paymentType)
+    {
+        SelectOption(invoiceNumber, ShipmentTypeBy, deliveryType, "Вид доставки");
+        SelectOption(invoiceNumber, PaymentTypeBy, paymentType, "Оплата");
+
+        var pane = OpenInvoice(invoiceNumber);
+        var reserve = pane.FindElements(ActiveInvoiceReserveBy)
+            .FirstOrDefault(element => element.Displayed && element.Enabled)
+            ?? throw new InvalidOperationException(
+                $"У сохранённого счёта '{invoiceNumber}' недоступна кнопка резервирования.");
+
+        var checkpoint = driver.CaptureAngularRequestCheckpoint();
+        driver.ClickRobustly(reserve);
+        driver.WaitUntilAngularRequestsCompleteAfter(checkpoint, waitTimeout);
+        _wait.Until(_ => IsReserved(invoiceNumber));
+    }
 
     public string Description(string invoiceNumber) => ActiveInvoiceText(invoiceNumber);
 
@@ -147,6 +248,78 @@ public sealed class BasketInvoicePage(IWebDriver driver, TimeSpan waitTimeout)
 
     private string ActiveInvoiceText(string invoiceNumber) =>
         UiText.NormalizeWhitespace(OpenInvoice(invoiceNumber).Text);
+
+    private void SelectOption(
+        string invoiceNumber,
+        By fieldBy,
+        string expectedValue,
+        string fieldName)
+    {
+        var field = RequiredVisibleField(OpenInvoice(invoiceNumber), fieldBy, fieldName);
+        var description = field.FindElement(SelectizeDescriptionBy);
+        var currentValue = UiText.NormalizeWhitespace(description.Text);
+        if (string.Equals(currentValue, expectedValue, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (!field.Enabled || field.GetAttribute("disabled") is not null)
+        {
+            throw new InvalidOperationException(
+                $"В счёте '{invoiceNumber}' поле '{fieldName}' заблокировано. " +
+                $"Текущее значение: '{currentValue}', ожидается: '{expectedValue}'.");
+        }
+
+        // Клик по вложенной иконке вызывает openlist() и на самой иконке, и на
+        // родительском контейнере. Нажимаем текст значения: событие всплывает
+        // только к контейнеру и список гарантированно открывается один раз.
+        driver.ClickRobustly(description);
+
+        var option = _wait.Until(_ =>
+        {
+            var refreshedField = RequiredVisibleField(
+                OpenInvoice(invoiceNumber),
+                fieldBy,
+                fieldName);
+            return refreshedField.FindElements(SelectizeOptionBy)
+                .FirstOrDefault(element =>
+                    element.Displayed &&
+                    string.Equals(
+                        UiText.NormalizeWhitespace(element.Text),
+                        expectedValue,
+                        StringComparison.OrdinalIgnoreCase));
+        });
+
+        var checkpoint = driver.CaptureAngularRequestCheckpoint();
+        driver.ClickRobustly(option);
+        driver.WaitUntilAngularRequestsCompleteAfter(checkpoint, waitTimeout);
+
+        _wait.Until(_ => string.Equals(
+            UiText.NormalizeWhitespace(
+                RequiredVisibleField(
+                    OpenInvoice(invoiceNumber),
+                    fieldBy,
+                    fieldName)
+                .FindElement(SelectizeDescriptionBy)
+                .Text),
+            expectedValue,
+            StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static IWebElement RequiredVisibleField(
+        IWebElement pane,
+        By fieldBy,
+        string fieldName) => pane.FindElements(fieldBy)
+        .FirstOrDefault(element => element.Displayed)
+        ?? throw new InvalidOperationException(
+            $"В активном счёте не найдено поле '{fieldName}'.");
+
+    private bool HasAnyText(string invoiceNumber, params string[] values)
+    {
+        var invoiceText = ActiveInvoiceText(invoiceNumber);
+        return values.Any(value =>
+            invoiceText.Contains(value, StringComparison.OrdinalIgnoreCase));
+    }
 
     private IWebElement? InvoiceTab(string invoiceNumber) => driver.FindElements(InvoiceTabsBy)
         .FirstOrDefault(element =>
@@ -219,13 +392,13 @@ public sealed class BasketInvoicePage(IWebDriver driver, TimeSpan waitTimeout)
     /// </summary>
     private static string NormalizeWarehouse(string value)
     {
-        var withoutServiceMarker = Regex.Replace(
+        var withoutDisplayMarkers = Regex.Replace(
             UiText.NormalizeWhitespace(value).ToLowerInvariant(),
-            @"\bрс\b",
+            @"\b(?:рс|берег)\b",
             string.Empty,
             RegexOptions.CultureInvariant);
         return Regex.Replace(
-            withoutServiceMarker,
+            withoutDisplayMarkers,
             @"[^\p{L}\p{Nd}]+",
             string.Empty,
             RegexOptions.CultureInvariant);
