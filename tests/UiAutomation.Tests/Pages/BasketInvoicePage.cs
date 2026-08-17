@@ -16,8 +16,6 @@ public sealed class BasketInvoicePage(IWebDriver driver, TimeSpan waitTimeout)
     private static readonly By ActivePaneBy = By.CssSelector(".tab-pane.active");
     private static readonly By InvoiceProductCardBy = By.CssSelector(
         "a[ng-click='openProductCard(item.Product)']");
-    private static readonly By ActiveInvoiceDeleteBy = By.CssSelector(
-        "#buttonBasketRemoveInvoice[ng-click='delete($event)']");
     private static readonly By InvoiceJournalTabBy = By.CssSelector(
         "li[select=\"selecttab('journal')\"]");
     private static readonly By JournalRowsBy = By.CssSelector("table tbody tr");
@@ -235,25 +233,11 @@ public sealed class BasketInvoicePage(IWebDriver driver, TimeSpan waitTimeout)
     public string Description(string invoiceNumber) => ActiveInvoiceText(invoiceNumber);
 
     /// <summary>
-    /// Удаляет только указанный счёт. Сначала используется его открытая вкладка;
-    /// если вкладку уже закрыли, выполняется точечный поиск строки в журнале.
+    /// Удаляет только указанный счёт через «Журнал рахунків». Кнопка ищется
+    /// внутри строки точного номера, поэтому соседний документ удалить нельзя.
     /// </summary>
     public void Delete(string invoiceNumber)
     {
-        var tab = InvoiceTab(invoiceNumber);
-        if (tab is not null)
-        {
-            var pane = OpenInvoice(invoiceNumber);
-            var delete = pane.FindElements(ActiveInvoiceDeleteBy)
-                .FirstOrDefault(IsVisible)
-                ?? throw new InvalidOperationException(
-                    $"У счёта '{invoiceNumber}' нет доступной кнопки удаления.");
-
-            DeleteWithConfirmation(delete);
-            _wait.Until(_ => InvoiceTab(invoiceNumber) is null);
-            return;
-        }
-
         OpenJournal();
         var row = _wait.Until(_ => JournalRow(invoiceNumber));
         var journalDelete = row.FindElements(JournalInvoiceDeleteBy)
@@ -469,27 +453,16 @@ public sealed class BasketInvoicePage(IWebDriver driver, TimeSpan waitTimeout)
 
     private void WaitUntilDeletedFromJournal(string invoiceNumber)
     {
-        var quickWait = new WebDriverWait(
-            driver,
-            TimeSpan.FromSeconds(Math.Min(5, Math.Max(1, waitTimeout.TotalSeconds))));
-        try
+        _wait.Until(_ =>
         {
-            quickWait.Until(_ => JournalRow(invoiceNumber) is null);
-            return;
-        }
-        catch (WebDriverTimeoutException)
-        {
-            // Production иногда оставляет удалённую строку в DOM журнала.
-            // Перезагрузка подтверждает состояние уже по свежим данным сервера.
-        }
+            var row = JournalRow(invoiceNumber);
+            return row is null || UiText.NormalizeWhitespace(row.Text)
+                .Contains("Вилучений", StringComparison.OrdinalIgnoreCase);
+        });
 
         driver.Navigate().Refresh();
         OpenJournal();
-        if (JournalRow(invoiceNumber) is not null)
-        {
-            throw new WebDriverTimeoutException(
-                $"Счёт '{invoiceNumber}' остался в журнале после удаления и обновления страницы.");
-        }
+        _wait.Until(_ => JournalRow(invoiceNumber) is null);
     }
 
     private static bool IsVisible(IWebElement element)
