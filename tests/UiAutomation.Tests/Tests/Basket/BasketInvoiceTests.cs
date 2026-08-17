@@ -111,15 +111,8 @@ public sealed class BasketInvoiceTests : BasketTestBase
         var selectedWarehouse = RequiredWarehouseWithStock(RoutedCard, KyivWarehouse);
 
         RememberInvoicesBeforeCreation();
-        Basket.SaveSelectedProducts(selectedWarehouse);
+        Basket.ReserveSelectedProducts(selectedWarehouse);
         var invoiceNumber = WaitForCreatedInvoice();
-        Assert.That(
-            _invoice.IsSaved(invoiceNumber),
-            Is.True,
-            $"Счёт '{invoiceNumber}' не получил статус 'Збережений'.");
-
-        _invoice.SelectDeliveryType(invoiceNumber, PlannedDelivery);
-        _invoice.Reserve(invoiceNumber);
 
         AssertReservedInvoice(RoutedCard, KyivWarehouse, PlannedDelivery);
     }
