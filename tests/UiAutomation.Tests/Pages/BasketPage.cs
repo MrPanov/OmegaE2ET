@@ -18,22 +18,38 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     /// <summary>Раздел корзины с позициями под заказ.</summary>
     public const string BackorderSection = "Товари під замовлення";
 
-    private static readonly By AddCardInputBy = By.Id("inputBasketAddCardNumber");
-    private static readonly By AddCardConfirmBy = By.Id("buttonBasketGo");
-    private static readonly By BasketRowsBy = By.CssSelector(".item-basket");
-    private static readonly By ProductCardLinkBy = By.CssSelector(".basketCard a");
-    private static readonly By RemoveButtonBy = By.CssSelector("a.basketDel");
-    private static readonly By ClearBasketBy = By.XPath("//a[contains(@ng-click,'clearBasket')]");
+    // Production пока использует старый id, а обновлённая Test-среда оставила
+    // полю только стабильный пользовательский placeholder.
+    private static readonly By AddCardInputBy = By.CssSelector(
+        "#inputBasketAddCardNumber, input[placeholder='Додати позицію']");
+    private static readonly By AddCardConfirmBy = By.CssSelector(
+        "#buttonBasketGo[ng-click*='addSearchItemToBasketTable'], " +
+        "[ng-click*='addSearchItemToBasketTable']");
+    private static readonly By BasketRowsBy = By.CssSelector(".item-basket, .basket-row");
+    private static readonly By ProductCardLinkBy = By.CssSelector(
+        ".basketCard a, .b-cart-no a");
+    private static readonly By RemoveButtonBy = By.CssSelector(
+        "a.basketDel, .b-delete, [ng-click*='delete'][ng-click*='item']");
+    private static readonly By ClearBasketBy = By.CssSelector("[tooltip='Очистити кошик']");
     private static readonly By AddQuantityInputBy = By.XPath(
-        "//*[button[contains(@class,'claim-plus-btn')]]//input[@type='number']");
-    private static readonly By AddQuantityPlusBy = By.CssSelector("button.claim-plus-btn");
-    private static readonly By AddQuantityMinusBy = By.CssSelector("button.claim-minus-btn");
+        "//*[button[contains(@class,'claim-plus-btn')]]//input[@type='number'] | " +
+        "(//input[@placeholder='Додати позицію']/following::input[@type='number'])[1]");
+    private static readonly By AddQuantityPlusBy = By.XPath(
+        "//button[contains(@class,'claim-plus-btn')] | " +
+        "(//input[@placeholder='Додати позицію']/following::input[@type='number'])[1]" +
+        "/following-sibling::button[1]");
+    private static readonly By AddQuantityMinusBy = By.XPath(
+        "//button[contains(@class,'claim-minus-btn')] | " +
+        "(//input[@placeholder='Додати позицію']/following::input[@type='number'])[1]" +
+        "/preceding-sibling::button[1]");
     private static readonly By RowQuantityInputBy = By.CssSelector("input[type='number']");
     private static readonly By RowCheckboxBy = By.CssSelector("input[type='checkbox']");
     private static readonly By WarehouseNameBy = By.CssSelector(
-        "tr.hidden-lg td[ng-repeat='war in availablewarehouses'] span[data-content]");
+        "tr.hidden-lg td[ng-repeat='war in availablewarehouses'] span[data-content], " +
+        ".wh-dropdown__option .wh-name");
     private static readonly By WarehouseStockBy = By.CssSelector(
-        "td[ng-repeat='war in item.availablewarehouses'] span");
+        "td[ng-repeat='war in item.availablewarehouses'] span, " +
+        ".wh-dropdown__option .wh-rest");
     private static readonly By SelectAllLabelBy = By.XPath(
         "//label[contains(normalize-space(.), 'Вибрати всі')]");
     // Сама сумма лежит не в узле с подписью, а в ближайшем следующем <strong>.
@@ -146,9 +162,7 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
 
         try
         {
-            var resultWait = new WebDriverWait(
-                driver,
-                TimeSpan.FromSeconds(Math.Min(5, Math.Max(1, waitTimeout.TotalSeconds))));
+            var resultWait = new WebDriverWait(driver, waitTimeout);
             resultWait.Until(_ =>
                 HasProduct(expectedCard) && ProductQuantity(expectedCard) == expectedQuantity);
         }
@@ -161,11 +175,13 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
             var notificationText = notifications.Length == 0
                 ? "уведомлений нет"
                 : string.Join(" | ", notifications);
+            var expectedCardMarkup = FindCardRowMarkup(expectedCard);
 
             throw new InvalidOperationException(
-                $"После клика '#buttonBasketGo' и завершения запроса идентификатор '{identifier}' " +
+                $"После клика '#buttonBasketGo' идентификатор '{identifier}' " +
                 $"не дал карточку '{expectedCard}' с количеством {expectedQuantity}. " +
-                $"Видимые карточки: [{string.Join(", ", ProductCards)}]; {notificationText}.",
+                $"Видимые карточки: [{string.Join(", ", ProductCards)}]; {notificationText}. " +
+                $"Разметка ожидаемой карточки: {expectedCardMarkup}",
                 exception);
         }
 
@@ -236,20 +252,39 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     /// </summary>
     public IReadOnlyList<string> WarehousesWithStock(string cardNumber)
     {
-        var row = RequiredProductRow(cardNumber);
-        var names = row.FindElements(WarehouseNameBy)
-            .Select(element => UiText.NormalizeWhitespace(
-                element.GetAttribute("data-content") ?? string.Empty))
-            .ToArray();
-        var stocks = row.FindElements(WarehouseStockBy)
-            .Select(element => UiText.NormalizeWhitespace(element.Text))
-            .ToArray();
+        string[] names = [];
+        string[] stocks = [];
+        try
+        {
+            _wait.Until(_ =>
+            {
+                try
+                {
+                    var row = RequiredProductRow(cardNumber);
+                    names = row.FindElements(WarehouseNameBy)
+                        .Select(element => UiText.NormalizeWhitespace(
+                            element.GetAttribute("data-content") ?? ElementText(element)))
+                        .ToArray();
+                    stocks = row.FindElements(WarehouseStockBy)
+                        .Select(element => UiText.NormalizeWhitespace(ElementText(element)))
+                        .ToArray();
 
-        if (names.Length == 0 || names.Length != stocks.Length)
+                    return names.Length > 0 && names.Length == stocks.Length;
+                }
+                catch (StaleElementReferenceException)
+                {
+                    names = [];
+                    stocks = [];
+                    return false;
+                }
+            });
+        }
+        catch (WebDriverTimeoutException exception)
         {
             throw new InvalidOperationException(
-                $"Не удалось сопоставить склады и остатки для карточки '{cardNumber}': " +
-                $"складов {names.Length}, значений {stocks.Length}.");
+                $"Не удалось дождаться складов и остатков для карточки '{cardNumber}': " +
+                $"складов {names.Length}, значений {stocks.Length}.",
+                exception);
         }
 
         return names.Zip(stocks)
@@ -315,12 +350,46 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     /// </summary>
     public bool HasClearButton => driver.IsVisible(ClearBasketBy);
 
-    /// <summary>Удаляет из корзины все позиции, включая чужие. Подтверждения нет.</summary>
-    public void ClearBasket()
+    /// <summary>
+    /// Очищает корзину, только если в ней есть позиции. На пустой корзине кнопки
+    /// <c>tooltip="Очистити кошик"</c> в DOM нет, и это штатное состояние.
+    /// </summary>
+    /// <returns><see langword="true"/>, если кнопка очистки была нажата.</returns>
+    public bool ClearIfNotEmpty()
     {
+        if (ProductCards.Count == 0) return false;
+
         ClickWhenReady(ClearBasketBy);
+        _wait.Until(_ => driver.VisibleTexts(NotificationBy).Any(text =>
+            text.Contains("Кошик очищено", StringComparison.OrdinalIgnoreCase)));
         _wait.Until(_ => ProductCards.Count == 0);
         WaitUntilIdle();
+
+        var animationWait = new WebDriverWait(
+            driver,
+            TimeSpan.FromSeconds(Math.Min(3, Math.Max(1, waitTimeout.TotalSeconds))));
+        try
+        {
+            animationWait.Until(_ => !HasClearButton);
+        }
+        catch (WebDriverTimeoutException)
+        {
+            // В headless Angular иногда оставляет кнопку в состоянии ng-leave.
+            // Настоящая перезагрузка подтверждает пустую корзину по данным сервера.
+            Reload();
+            _wait.Until(_ => !HasClearButton && ProductCards.Count == 0);
+        }
+
+        return true;
+    }
+
+    /// <summary>Требует непустую корзину и удаляет из неё все позиции.</summary>
+    public void ClearBasket()
+    {
+        if (!ClearIfNotEmpty())
+        {
+            throw new InvalidOperationException("Нельзя нажать очистку: корзина уже пуста.");
+        }
     }
 
     /// <summary>Сколько строк корзины относится к указанной карточке.</summary>
@@ -399,12 +468,11 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
 
         SetAddQuantity(quantity);
 
-        // Нажимаем именно кнопку подтверждения формы и ждём её Angular-запрос.
-        // Одного ожидания строки товара недостаточно: при непринятом клике оно
-        // скрывает настоящую причину за общим таймаутом AddByCode.
-        var checkpoint = driver.CaptureAngularRequestCheckpoint();
+        // Нажимаем именно кнопку подтверждения формы. Результат операции ждут
+        // AddProduct/AddByIdentifier по карточке и количеству. Ожидать здесь
+        // глобальный pendingRequests == 0 нельзя: Production держит фоновые
+        // запросы расчёта доставки, не относящиеся к добавлению позиции.
         ClickWhenReady(AddCardConfirmBy);
-        driver.WaitUntilAngularRequestsCompleteAfter(checkpoint, waitTimeout);
     }
 
     /// <summary>
@@ -444,6 +512,11 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
     private static int ParseInt(string? value) =>
         int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : 0;
 
+    private static string ElementText(IWebElement element) =>
+        string.IsNullOrWhiteSpace(element.Text)
+            ? element.GetAttribute("textContent") ?? string.Empty
+            : element.Text;
+
     /// <summary>Достаёт денежную сумму из текста вида «... в кошику: 159.06 грн.».</summary>
     private static decimal ParseAmount(string text)
     {
@@ -478,6 +551,41 @@ public sealed class BasketPage(IWebDriver driver, TimeSpan waitTimeout)
 
     private IWebElement? ProductRow(string cardNumber) => driver.FindElements(BasketRowsBy)
         .FirstOrDefault(row => IsVisibleRow(row) && RowBelongsToCard(row, cardNumber));
+
+    private string FindCardRowMarkup(string cardNumber)
+    {
+        var card = driver.FindElements(By.XPath(
+                $"//*[normalize-space(text())='{cardNumber}']"))
+            .FirstOrDefault(element => element.Displayed);
+        if (card is null) return "<карточка не найдена в DOM>";
+
+        var markup = ((IJavaScriptExecutor)driver)
+            .ExecuteScript(
+                """
+                var element = arguments[0];
+                for (var current = element; current; current = current.parentElement) {
+                  if (current.querySelector &&
+                      current.querySelector("input[type='checkbox']") &&
+                      current.querySelector("input, button")) {
+                    return JSON.stringify(Array.from(current.querySelectorAll("input, button, a"))
+                      .map(function (control) {
+                        return {
+                          tag: control.tagName,
+                          type: control.getAttribute("type"),
+                          className: control.getAttribute("class"),
+                          value: control.value,
+                          text: (control.innerText || "").trim(),
+                          ngClick: control.getAttribute("ng-click")
+                        };
+                      }));
+                  }
+                }
+                return element.outerHTML;
+                """,
+                card)?.ToString()
+            ?? "<outerHTML недоступен>";
+        return markup.Length <= 5000 ? markup : markup[..5000] + "…";
+    }
 
     private static bool RowBelongsToCard(IWebElement row, string cardNumber)
     {

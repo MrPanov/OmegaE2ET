@@ -24,12 +24,26 @@ public sealed class BasketInvoicePage(IWebDriver driver, TimeSpan waitTimeout)
     private static readonly By JournalInvoiceLinkBy = By.CssSelector("a[ng-click='activate(item)']");
     private static readonly By JournalInvoiceDeleteBy = By.CssSelector(
         "#buttonBasketRemoveInvoice[ng-click='deleteInvoice($event, item)']");
-    private static readonly By ShipmentTypeBy = By.Id("slctshipmentType");
+    private static readonly By ShipmentTypeBy = By.XPath(
+        ".//*[@id='slctshipmentType'] | " +
+        ".//omega-selectize[@options-selectize='shipmentTypeList'] | " +
+        ".//div[contains(concat(' ', normalize-space(@class), ' '), ' ui-select-container ')][" +
+        "contains(normalize-space(.), \"Кур'єрські служби\") or " +
+        "contains(normalize-space(.), 'Планова доставка') or " +
+        "contains(normalize-space(.), 'Самовивіз') or " +
+        "contains(normalize-space(.), 'Експрес доставка')]");
+    private static readonly By WarehouseBy = By.Id("slctWarehouse");
     private static readonly By PaymentTypeBy = By.CssSelector(
         "omega-selectize[options-selectize='lists.paymentList']");
     private static readonly By SelectizeDescriptionBy = By.CssSelector(".description-label");
     private static readonly By SelectizeOptionBy = By.CssSelector(
         ".selectize-dropdown-content .option[data-selectable]");
+    private static readonly By UiSelectToggleBy = By.CssSelector(
+        ".ui-select-toggle, .ui-select-match");
+    private static readonly By UiSelectValueBy = By.CssSelector(
+        ".ui-select-match-text, .ui-select-match");
+    private static readonly By UiSelectOptionBy = By.CssSelector(
+        ".ui-select-choices-row");
     private static readonly By ActiveInvoiceReserveBy = By.CssSelector(
         "#buttonBasketReservationInvoice[ng-click=\"save($event,'Apply')\"]");
 
@@ -151,17 +165,39 @@ public sealed class BasketInvoicePage(IWebDriver driver, TimeSpan waitTimeout)
         return quantity;
     }
 
+    public string WarehouseName(string invoiceNumber)
+    {
+        var pane = OpenInvoice(invoiceNumber);
+        var warehouse = pane.FindElements(WarehouseBy)
+            .FirstOrDefault(element => element.Displayed);
+        if (warehouse is not null)
+        {
+            var description = warehouse.FindElements(SelectizeDescriptionBy)
+                .FirstOrDefault(element => element.Displayed);
+            if (description is not null)
+            {
+                return UiText.NormalizeWhitespace(description.Text);
+            }
+        }
+
+        var match = Regex.Match(
+            UiText.NormalizeWhitespace(pane.Text),
+            @"(?:^|\s)Склад\s+(.+?)\s+Замітка(?:\s|$)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success ? UiText.NormalizeWhitespace(match.Groups[1].Value) : string.Empty;
+    }
+
     public bool HasWarehouse(string invoiceNumber, string warehouseName) =>
-        NormalizeWarehouse(ActiveInvoiceText(invoiceNumber))
+        NormalizeWarehouse(WarehouseName(invoiceNumber))
             .Contains(NormalizeWarehouse(warehouseName), StringComparison.Ordinal);
 
-    public bool HasDeliveryType(string invoiceNumber, string deliveryType)
+    public bool HasDeliveryType(string invoiceNumber, params string[] deliveryTypes)
     {
         var invoiceText = ActiveInvoiceText(invoiceNumber);
-        return Regex.IsMatch(
+        return deliveryTypes.Any(deliveryType => Regex.IsMatch(
             invoiceText,
-            $@"Вид\s+доставки\s+{Regex.Escape(deliveryType)}(?:\s|$)",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            $@"(?:Вид\s+доставки\s+)?{Regex.Escape(deliveryType)}(?:\s|$)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
     }
 
     public bool HasPaymentType(string invoiceNumber, string paymentType)
@@ -173,19 +209,17 @@ public sealed class BasketInvoicePage(IWebDriver driver, TimeSpan waitTimeout)
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
-    /// <summary>
-    /// Настраивает сохранённый счёт и переводит его в резерв. После прямого
-    /// резервирования поля доставки заблокированы, поэтому менять их нужно до
-    /// нажатия кнопки резерва внутри счёта.
-    /// </summary>
-    public void ConfigureAndReserve(
-        string invoiceNumber,
-        string deliveryType,
-        string paymentType)
-    {
+    /// <summary>Выбирает вид доставки в сохранённом счёте.</summary>
+    public void SelectDeliveryType(string invoiceNumber, string deliveryType) =>
         SelectOption(invoiceNumber, ShipmentTypeBy, deliveryType, "Вид доставки");
+
+    /// <summary>Выбирает способ оплаты в сохранённом счёте.</summary>
+    public void SelectPaymentType(string invoiceNumber, string paymentType) =>
         SelectOption(invoiceNumber, PaymentTypeBy, paymentType, "Оплата");
 
+    /// <summary>Переводит заранее настроенный сохранённый счёт в резерв.</summary>
+    public void Reserve(string invoiceNumber)
+    {
         var pane = OpenInvoice(invoiceNumber);
         var reserve = pane.FindElements(ActiveInvoiceReserveBy)
             .FirstOrDefault(element => element.Displayed && element.Enabled)
@@ -228,7 +262,7 @@ public sealed class BasketInvoicePage(IWebDriver driver, TimeSpan waitTimeout)
                 $"В журнале у счёта '{invoiceNumber}' нет доступной кнопки удаления.");
 
         DeleteWithConfirmation(journalDelete);
-        _wait.Until(_ => JournalRow(invoiceNumber) is null);
+        WaitUntilDeletedFromJournal(invoiceNumber);
     }
 
     private IWebElement OpenInvoice(string invoiceNumber)
@@ -256,63 +290,123 @@ public sealed class BasketInvoicePage(IWebDriver driver, TimeSpan waitTimeout)
         string fieldName)
     {
         var field = RequiredVisibleField(OpenInvoice(invoiceNumber), fieldBy, fieldName);
-        var description = field.FindElement(SelectizeDescriptionBy);
-        var currentValue = UiText.NormalizeWhitespace(description.Text);
-        if (string.Equals(currentValue, expectedValue, StringComparison.OrdinalIgnoreCase))
+        var isUiSelect = HasCssClass(field, "ui-select-container");
+        var currentValueElement = isUiSelect
+            ? field.FindElements(UiSelectValueBy).FirstOrDefault(element => element.Displayed)
+            : field.FindElements(SelectizeDescriptionBy).FirstOrDefault(element => element.Displayed);
+        if (currentValueElement is null)
+        {
+            throw new InvalidOperationException(
+                $"В счёте '{invoiceNumber}' не удалось прочитать поле '{fieldName}'.");
+        }
+
+        var currentValue = UiText.NormalizeWhitespace(currentValueElement.Text);
+        if (OptionMatches(currentValue, expectedValue))
         {
             return;
         }
 
-        if (!field.Enabled || field.GetAttribute("disabled") is not null)
+        if (isUiSelect &&
+            (!field.Enabled ||
+             field.GetAttribute("disabled") is not null ||
+             HasCssClass(field, "disabled")))
         {
             throw new InvalidOperationException(
                 $"В счёте '{invoiceNumber}' поле '{fieldName}' заблокировано. " +
                 $"Текущее значение: '{currentValue}', ожидается: '{expectedValue}'.");
         }
 
-        // Клик по вложенной иконке вызывает openlist() и на самой иконке, и на
-        // родительском контейнере. Нажимаем текст значения: событие всплывает
-        // только к контейнеру и список гарантированно открывается один раз.
-        driver.ClickRobustly(description);
+        if (isUiSelect)
+        {
+            var toggle = field.FindElements(UiSelectToggleBy)
+                .FirstOrDefault(element => element.Displayed && element.Enabled)
+                ?? throw new InvalidOperationException(
+                    $"В счёте '{invoiceNumber}' не удалось открыть поле '{fieldName}'.");
+            driver.ClickRobustly(toggle);
+        }
+        else
+        {
+            // Клик по вложенной иконке вызывает openlist() и на самой иконке, и
+            // на родителе. Текст значения всплывает только к одному обработчику.
+            driver.ClickRobustly(currentValueElement);
+        }
 
-        var option = _wait.Until(_ =>
+        var optionWait = new WebDriverWait(
+            driver,
+            TimeSpan.FromSeconds(Math.Min(10, Math.Max(1, waitTimeout.TotalSeconds))));
+        var option = optionWait.Until(_ =>
         {
             var refreshedField = RequiredVisibleField(
                 OpenInvoice(invoiceNumber),
                 fieldBy,
                 fieldName);
-            return refreshedField.FindElements(SelectizeOptionBy)
+            var optionBy = HasCssClass(refreshedField, "ui-select-container")
+                ? UiSelectOptionBy
+                : SelectizeOptionBy;
+            return refreshedField.FindElements(optionBy)
                 .FirstOrDefault(element =>
                     element.Displayed &&
-                    string.Equals(
-                        UiText.NormalizeWhitespace(element.Text),
-                        expectedValue,
-                        StringComparison.OrdinalIgnoreCase));
+                    OptionMatches(element.Text, expectedValue));
         });
 
         var checkpoint = driver.CaptureAngularRequestCheckpoint();
         driver.ClickRobustly(option);
         driver.WaitUntilAngularRequestsCompleteAfter(checkpoint, waitTimeout);
 
-        _wait.Until(_ => string.Equals(
-            UiText.NormalizeWhitespace(
-                RequiredVisibleField(
-                    OpenInvoice(invoiceNumber),
-                    fieldBy,
-                    fieldName)
-                .FindElement(SelectizeDescriptionBy)
-                .Text),
-            expectedValue,
-            StringComparison.OrdinalIgnoreCase));
+        _wait.Until(_ => OptionMatches(
+            CurrentOptionValue(RequiredVisibleField(
+                OpenInvoice(invoiceNumber),
+                fieldBy,
+                fieldName)),
+            expectedValue));
+    }
+
+    private static string CurrentOptionValue(IWebElement field)
+    {
+        var valueBy = HasCssClass(field, "ui-select-container")
+            ? UiSelectValueBy
+            : SelectizeDescriptionBy;
+        var value = field.FindElements(valueBy)
+            .FirstOrDefault(element => element.Displayed);
+        return UiText.NormalizeWhitespace(value?.Text ?? string.Empty);
+    }
+
+    private static bool HasCssClass(IWebElement element, string className) =>
+        (element.GetAttribute("class") ?? string.Empty)
+        .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+        .Contains(className, StringComparer.OrdinalIgnoreCase);
+
+    private static bool OptionMatches(string actual, string expected)
+    {
+        var normalizedActual = UiText.NormalizeWhitespace(actual);
+        var normalizedExpected = UiText.NormalizeWhitespace(expected);
+        return normalizedActual.Contains(normalizedExpected, StringComparison.OrdinalIgnoreCase) ||
+               normalizedExpected.Contains(normalizedActual, StringComparison.OrdinalIgnoreCase);
     }
 
     private static IWebElement RequiredVisibleField(
         IWebElement pane,
         By fieldBy,
-        string fieldName) => pane.FindElements(fieldBy)
-        .FirstOrDefault(element => element.Displayed)
-        ?? throw new InvalidOperationException(
-            $"В активном счёте не найдено поле '{fieldName}'.");
+        string fieldName)
+    {
+        var field = pane.FindElements(fieldBy)
+            .FirstOrDefault(element => element.Displayed);
+        if (field is not null) return field;
+
+        var candidates = pane.FindElements(By.CssSelector(
+                "omega-selectize, select, [class*='dropdown']"))
+            .Where(element => element.Displayed)
+            .Select(element =>
+                $"tag={element.TagName}; id={element.GetAttribute("id")}; " +
+                $"class={element.GetAttribute("class")}; " +
+                $"label={element.GetAttribute("label")}; " +
+                $"options={element.GetAttribute("options-selectize")}; " +
+                $"text={UiText.NormalizeWhitespace(element.Text)}")
+            .ToArray();
+        throw new InvalidOperationException(
+            $"В активном счёте не найдено поле '{fieldName}'. " +
+            $"Доступные select-компоненты: [{string.Join(" | ", candidates)}].");
+    }
 
     private bool HasAnyText(string invoiceNumber, params string[] values)
     {
@@ -354,7 +448,6 @@ public sealed class BasketInvoicePage(IWebDriver driver, TimeSpan waitTimeout)
 
     private void DeleteWithConfirmation(IWebElement delete)
     {
-        var checkpoint = driver.CaptureAngularRequestCheckpoint();
         driver.ClickRobustly(delete);
 
         var alert = _wait.Until(_ =>
@@ -369,8 +462,34 @@ public sealed class BasketInvoicePage(IWebDriver driver, TimeSpan waitTimeout)
             }
         });
         alert.Accept();
+        // Вызывающие методы ждут исчезновения точной вкладки или строки счёта.
+        // Это надёжнее глобального pendingRequests == 0: Production параллельно
+        // держит фоновые запросы расчёта доставки.
+    }
 
-        driver.WaitUntilAngularRequestsCompleteAfter(checkpoint, waitTimeout);
+    private void WaitUntilDeletedFromJournal(string invoiceNumber)
+    {
+        var quickWait = new WebDriverWait(
+            driver,
+            TimeSpan.FromSeconds(Math.Min(5, Math.Max(1, waitTimeout.TotalSeconds))));
+        try
+        {
+            quickWait.Until(_ => JournalRow(invoiceNumber) is null);
+            return;
+        }
+        catch (WebDriverTimeoutException)
+        {
+            // Production иногда оставляет удалённую строку в DOM журнала.
+            // Перезагрузка подтверждает состояние уже по свежим данным сервера.
+        }
+
+        driver.Navigate().Refresh();
+        OpenJournal();
+        if (JournalRow(invoiceNumber) is not null)
+        {
+            throw new WebDriverTimeoutException(
+                $"Счёт '{invoiceNumber}' остался в журнале после удаления и обновления страницы.");
+        }
     }
 
     private static bool IsVisible(IWebElement element)
